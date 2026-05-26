@@ -1,0 +1,5 @@
+api:
+  listen: ":1984"
+
+streams:
+  living_room: rtsp://eufyp2pstream:8554/T8170T1026063339

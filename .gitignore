@@ -1,0 +1,22 @@
+# --- Secrets / credentials (DO NOT COMMIT) ---
+docker-compose.yml
+docker-compose.yml.backup
+docker-compose.override.yml
+*.env
+.env
+.env.*
+
+# Eufy runtime data (contains auth tokens, cloud tokens, private keys, etc.)
+eufy-data/
+persistent.json
+
+# Large / generated test captures
+stream-test.json
+*.log
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
