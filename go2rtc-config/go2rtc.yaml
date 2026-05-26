@@ -1,5 +1,38 @@
 api:
   listen: ":1984"
 
+rtsp:
+  listen: ":8554"
+
+webrtc:
+  listen: ":8555"
+
+log:
+  level: info
+  exec: trace
+
 streams:
-  living_room: rtsp://eufyp2pstream:8554/T8170T1026063339
+  # Eufy "Living Room" (T8170 / Indoor Cam Pan & Tilt).
+  #
+  # Pipeline:
+  #   T8170 camera ──P2P──▶ eufy-security-ws ──WS──▶ eufyp2pstream
+  #     ──TCP:63336 (HEVC bytes)──▶ ffmpeg
+  #     transcode HEVC -> H.264 baseline @1080p (browser-friendly)
+  #     ──▶ go2rtc ──▶ RTSP / MSE / WebRTC
+  #
+  # We expose only ONE producer because eufyp2pstream has a single P2P
+  # session per camera; multiple concurrent ffmpeg consumers confuse its
+  # livestream state machine and the second one starves with 0 frames.
+  living_room:
+    - "exec:ffmpeg -hide_banner -loglevel warning
+        -thread_queue_size 512 -an -sn -dn
+        -analyzeduration 1200000 -probesize 1000000
+        -fflags +discardcorrupt+nobuffer -flags low_delay
+        -f hevc -i tcp://eufyp2pstream:63336?timeout=10000000
+        -vf scale=1920:-2:in_range=full:out_range=tv,format=yuv420p
+        -c:v libx264 -preset ultrafast -tune zerolatency
+        -profile:v main -pix_fmt yuv420p
+        -bf 0 -g 30 -r 15 -an
+        -x264-params keyint=30:min-keyint=30:scenecut=0:repeat-headers=1
+        -bsf:v dump_extra=freq=keyframe
+        -rtsp_transport tcp -f rtsp {output}"

@@ -1,0 +1,39 @@
+services:
+  eufy-security-ws:
+    image: bropat/eufy-security-ws:latest
+    container_name: eufy-security-ws
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - USERNAME=${EUFY_USERNAME}
+      - PASSWORD=${EUFY_PASSWORD}
+      - COUNTRY=${EUFY_COUNTRY:-US}
+      - TRUSTED_DEVICE_NAME=eufyBridge
+      - WS_LISTEN_PORT=3000
+    volumes:
+      - ./eufy-data:/data
+
+  eufyp2pstream:
+    build: ./bridge
+    container_name: eufyp2pstream
+    restart: unless-stopped
+    environment:
+      - EUFY_WS_HOST=eufy-security-ws
+      - EUFY_WS_PORT=3000
+    depends_on:
+      - eufy-security-ws
+
+  go2rtc:
+    image: alexxit/go2rtc:latest
+    container_name: go2rtc
+    restart: unless-stopped
+    ports:
+      - "1984:1984"   # web UI / HTTP API / MSE / HLS
+      - "8554:8554"   # RTSP
+      - "8555:8555/tcp"   # WebRTC TCP
+      - "8555:8555/udp"   # WebRTC UDP
+    volumes:
+      - ./go2rtc-config:/config
+    depends_on:
+      - eufyp2pstream

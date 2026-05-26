@@ -1,18 +1,26 @@
 # --- Secrets / credentials (DO NOT COMMIT) ---
-docker-compose.yml
-docker-compose.yml.backup
-docker-compose.override.yml
-*.env
+# Real .env with passwords. The committed .env.example is exempt below.
 .env
 .env.*
+!.env.example
+*.env
+!*.env.example
 
-# Eufy runtime data (contains auth tokens, cloud tokens, private keys, etc.)
+# Old hard-coded-creds compose snapshot
+docker-compose.yml.backup
+docker-compose.override.yml
+
+# Eufy runtime data (auth tokens, cloud tokens, private keys, push creds, ...)
 eufy-data/
 persistent.json
 
-# Large / generated test captures
+# Large / generated test captures and debug artifacts
 stream-test.json
 *.log
+.test.sh
+.probe_ws.*
+.first_frame.jpg
+.live_frame.jpg
 
 # OS / editor cruft
 .DS_Store
