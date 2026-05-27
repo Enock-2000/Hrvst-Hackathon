@@ -28,3 +28,12 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Python / vision runtime
+packhouse-runtime/.venv/
+**/__pycache__/
+*.pyc
+packhouse-runtime/runs/
+
+# Local test captures (not for git)
+camera_test_snapshot.jpg

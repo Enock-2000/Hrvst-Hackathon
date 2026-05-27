@@ -1,0 +1,4 @@
+# Live pack house vision (RTSP → YOLO)
+ultralytics>=8.3.0
+opencv-python>=4.8.0
+pyyaml>=6.0

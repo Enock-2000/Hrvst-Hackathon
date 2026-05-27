@@ -1,139 +1,110 @@
-# Eufy Bridge (Hrvst Hackathon)
+# Hrvst Hackathon — Pack House Vision
 
-A docker-based bridge that exposes Eufy cameras (including models that
-**do not support native RTSP**, like the T8170 Indoor Cam Pan & Tilt) as
-RTSP / HLS / MSE / WebRTC streams that any browser, VLC, Frigate or
-Home Assistant can consume.
+Live pack-house monitoring: **Eufy camera → RTSP → YOLO detection** with real-time bounding boxes.
 
-## Architecture
+Includes a Docker bridge for Eufy cameras that **do not support native RTSP** (e.g. T8170 Indoor Cam Pan & Tilt), plus a Python runtime for live object detection.
+
+## One-command start
+
+Clone, configure credentials, then run:
+
+```powershell
+git clone https://github.com/Enock-2000/Hrvst-Hackathon.git
+cd Hrvst-Hackathon
+copy .env.example .env
+# edit .env with your Eufy account
+.\Start-PackHouse.ps1
+```
+
+Or double-click **`Start-PackHouse.bat`**.
+
+This will:
+
+1. Start the Eufy camera bridge (Docker)
+2. Wait for the RTSP stream on go2rtc
+3. Create a Python environment on first run (if needed)
+4. Open a live video window with detection boxes (press **Q** to quit)
+
+Full documentation: **[RUN_GUIDE.md](RUN_GUIDE.md)**
+
+## Project layout
+
+```
+Hrvst-Hackathon/
+├── Start-PackHouse.ps1      ← run everything
+├── RUN_GUIDE.md
+├── docker-compose.yml       ← Eufy → RTSP bridge
+├── bridge/                  ← eufyp2pstream (local build)
+├── go2rtc-config/
+├── packhouse-runtime/       ← YOLO live detection
+│   ├── models/              ← packhouse_best.pt (required)
+│   ├── config/
+│   └── src/
+```
+
+## Options
+
+```powershell
+.\Start-PackHouse.ps1 -NoShow              # no window; save annotated video
+.\Start-PackHouse.ps1 -Device xpu          # Intel GPU inference
+.\Start-PackHouse.ps1 -Track               # object tracking IDs
+.\Start-PackHouse.ps1 -SkipDocker          # vision only (bridge already running)
+```
+
+## Stream URLs (when bridge is running)
+
+| Use | URL |
+|-----|-----|
+| Browser | http://localhost:1984/stream.html?src=living_room |
+| RTSP (YOLO / VLC) | `rtsp://127.0.0.1:8554/living_room` |
+| go2rtc dashboard | http://localhost:1984/ |
+
+---
+
+## Camera bridge architecture
 
 ```
 +---------------------+     +----------------+     +------------+
 |  eufy-security-ws   | --> |  eufyp2pstream | --> |  go2rtc    |
-|  bropat/...:latest  |     |  (local build) |     | alexxit/...|
 |  port 3000 (WS API) |     | tcp 63336 HEVC |     | 1984 / UI  |
 |                     |     | tcp 63337 AAC  |     | 8554 RTSP  |
-|                     |     |                |     | 8555 WebRTC|
 +---------------------+     +----------------+     +------------+
-         ^                                                ^
-         |                                                |
-   ws to Eufy Cloud                              your browser / VLC
-   + P2P to Camera
 ```
 
-* **`eufy-security-ws`** ([bropat/eufy-security-ws](https://github.com/bropat/eufy-security-ws))
-  — talks to the Eufy cloud and your station/cameras, exposes a
-  WebSocket JSON-RPC API on `:3000`.
-* **`eufyp2pstream`** (built locally from `bridge/`, source from
-  [oischinger/eufyp2pstream](https://github.com/oischinger/eufyp2pstream))
-  — connects to `eufy-security-ws`, calls `device.start_livestream`
-  whenever something connects to its TCP ports, then proxies the raw
-  H.264/H.265 video bytes on `:63336` and G.711 audio on `:63337`.
-  We build it locally because the project is distributed as a Home
-  Assistant addon — there is no `oischinger/eufyp2pstream` image on
-  Docker Hub.
-* **`go2rtc`** ([AlexxIT/go2rtc](https://github.com/AlexxIT/go2rtc))
-  — runs `ffmpeg` to read the HEVC bytes from `eufyp2pstream`,
-  transcodes to H.264 Main / `yuv420p` so browser MSE/WebRTC works,
-  and republishes the stream as RTSP/MSE/HLS/WebRTC.
+* **`eufy-security-ws`** ([bropat/eufy-security-ws](https://github.com/bropat/eufy-security-ws)) — Eufy cloud + P2P, WebSocket API on `:3000`.
+* **`eufyp2pstream`** (built from `bridge/`, [oischinger/eufyp2pstream](https://github.com/oischinger/eufyp2pstream)) — raw HEVC/AAC on TCP ports for ffmpeg.
+* **`go2rtc`** ([AlexxIT/go2rtc](https://github.com/AlexxIT/go2rtc)) — transcodes to browser-friendly H.264 and publishes RTSP/MSE/WebRTC.
 
-## Repo layout
+### Manual bridge only
 
-| Path                       | Purpose                                          |
-| -------------------------- | ------------------------------------------------ |
-| `docker-compose.yml`       | The three-service stack (uses `${EUFY_*}` env)   |
-| `.env.example`             | Template for the Eufy credentials                |
-| `bridge/Dockerfile`        | Builds the P2P → TCP sidecar                     |
-| `bridge/eufyp2pstream.py`  | Upstream P2P bridge script                       |
-| `bridge/websocket.py`      | Upstream WS client used by the script            |
-| `bridge/entrypoint.sh`     | Launches the bridge with `EUFY_WS_HOST/PORT`     |
-| `go2rtc-config/go2rtc.yaml`| Stream definitions / ffmpeg pipeline             |
-| `devices.json`             | Sample `state` response from `eufy-security-ws`  |
+```powershell
+docker compose up -d --build
+```
 
-Intentionally **not** in git (see `.gitignore`):
+Wait ~20 s, then open http://localhost:1984/
 
-* `.env`                       — your real Eufy credentials
-* `eufy-data/`                 — `persistent.json` with auth tokens / cloud token / private keys
-* `docker-compose.yml.backup`  — old snapshot that contained hard-coded creds
-* `stream-test.json`           — multi-MB local capture
+### Adding cameras
 
-## Quick start
+1. Find `serialNumber` via the WS API or `devices.json`.
+2. One `eufyp2pstream` container per camera (separate TCP port range).
+3. Add a `streams.<name>:` entry in `go2rtc-config/go2rtc.yaml`.
 
-1. **Clone & set up credentials**
+### Bridge troubleshooting
 
-   ```bash
-   git clone https://github.com/Enock-2000/Hrvst-Hackathon.git eufy-bridge
-   cd eufy-bridge
-   cp .env.example .env
-   # edit .env -> EUFY_USERNAME / EUFY_PASSWORD / EUFY_COUNTRY
-   ```
+| Symptom | Fix |
+|---------|-----|
+| Black MSE video | Wait ~10 s or switch to **WebRTC** |
+| `LIVESTREAM Start debounced` | `docker compose restart` (~25 s) |
+| `data partitioning is not implemented` | Use `-f hevc` in go2rtc ffmpeg pipeline |
+| `exec entrypoint.sh: no such file` | Rebuild — Dockerfile strips Windows CRLF |
 
-2. **Bring the stack up** (builds the local `eufyp2pstream` image on
-   first run; ~2 min):
+## Security
 
-   ```bash
-   docker compose up -d --build
-   ```
-
-3. **Wait ~20 s** for `eufy-security-ws` to authenticate to the Eufy
-   cloud and establish the P2P session, then open the go2rtc UI:
-
-   <http://localhost:1984/>
-
-   Click `living_room` → pick **MSE** or **WebRTC**.
-
-## Stream URLs
-
-For the bundled `living_room` stream (T8170 transcoded to 1080p H.264):
-
-| Consumer                | URL                                                              |
-| ----------------------- | ---------------------------------------------------------------- |
-| **Browser** (MSE/WebRTC)| <http://localhost:1984/stream.html?src=living_room>              |
-| VLC / ffplay / Frigate  | `rtsp://localhost:8554/living_room`                              |
-| JPEG snapshot           | <http://localhost:1984/api/frame.jpeg?src=living_room>           |
-| go2rtc dashboard        | <http://localhost:1984/>                                         |
-
-## Adding more cameras
-
-1. Find the camera's `serialNumber` via the WS API:
-
-   ```bash
-   curl -s http://localhost:3000/  # WS handshake, then use any ws client
-   ```
-
-   …or read `devices.json` for the sample response.
-
-2. Add another `device.start_livestream` consumer port to `bridge/`
-   (the upstream script only handles one camera at a time — for
-   multi-camera setups you currently need one `eufyp2pstream`
-   container per camera, each on its own TCP port range).
-
-3. Add a corresponding `streams.<name>:` entry to
-   `go2rtc-config/go2rtc.yaml`.
-
-## Troubleshooting
-
-| Symptom                                | Likely cause / fix                                                                                              |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Browser shows black screen, "MSE" tag  | First load before first IDR — wait ~10 s. If it persists, switch the player to **WebRTC**.                       |
-| `LIVESTREAM Start debounced (active=True)` in `eufyp2pstream` logs, 0 frames | Stale P2P session. Run `docker compose restart` (~25 s) to re-auth `eufy-security-ws` and clear state. |
-| `data partitioning is not implemented` in ffmpeg logs | The camera is emitting H.265 (HEVC) but ffmpeg was set to `-f h264`. Use the supplied `-f hevc` pipeline. |
-| Picture is rotated / sideways          | The T8170 ships frames in the orientation it's mounted in. Add `transpose=1` (CW) or `transpose=2` (CCW) to the `-vf` chain in `go2rtc.yaml`. |
-| `pull access denied for oischinger/eufyp2pstream` | The upstream project isn't on Docker Hub. This repo builds it locally via `bridge/Dockerfile` — make sure you ran `docker compose up --build`. |
-
-## Security notes
-
-* Credentials live only in `.env` (gitignored). The committed
-  `docker-compose.yml` references them as `${EUFY_USERNAME}` /
-  `${EUFY_PASSWORD}`.
-* `eufy-data/persistent.json` contains Firebase refresh tokens,
-  the Eufy `cloud_token`, your `clientPrivateKey`, and GCM push
-  credentials. It is gitignored — if it ever leaks, **rotate your
-  Eufy password immediately** to invalidate the derived tokens.
+* Credentials only in `.env` (gitignored).
+* `eufy-data/persistent.json` contains auth tokens — never commit; rotate Eufy password if leaked.
 
 ## Credits
 
 * [bropat/eufy-security-ws](https://github.com/bropat/eufy-security-ws)
 * [oischinger/eufyp2pstream](https://github.com/oischinger/eufyp2pstream)
 * [AlexxIT/go2rtc](https://github.com/AlexxIT/go2rtc)
-* [fuatakgun/eufy_security](https://github.com/fuatakgun/eufy_security) — original architecture inspiration

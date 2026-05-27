@@ -1,0 +1,20 @@
+# Pack house cameras — RTSP from go2rtc (repo root docker compose)
+# Start bridge first: docker compose up -d  (or .\Start-PackHouse.ps1)
+
+default_camera: entrance
+
+cameras:
+  entrance:
+    name: "Living room / entrance (Eufy)"
+    rtsp: "rtsp://127.0.0.1:8554/living_room"
+    # Optional JPEG fallback (lower FPS): http://127.0.0.1:1984/api/frame.jpeg?src=living_room
+    goals:
+      - delivery_detection
+      - license_plate
+      - produce_crate
+
+# Future cameras (add go2rtc streams first):
+#  weighing:
+#    rtsp: rtsp://127.0.0.1:8554/weighing
+#  wash:
+#    rtsp: rtsp://127.0.0.1:8554/wash
