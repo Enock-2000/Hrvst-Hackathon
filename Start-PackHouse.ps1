@@ -8,7 +8,7 @@
 
 .EXAMPLE
   .\Start-PackHouse.ps1 -NoShow
-  Headless mode — saves annotated video under packhouse-runtime/runs/live/
+  Headless mode - saves annotated video under packhouse-runtime/runs/live/
 
 .EXAMPLE
   .\Start-PackHouse.ps1 -Device xpu
@@ -27,7 +27,7 @@ $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
 $BridgeDir = $Root
 $VisionDir = Join-Path $Root "packhouse-runtime"
-$ModelPath = Join-Path $VisionDir "models" $Model
+$ModelPath = Join-Path (Join-Path $VisionDir "models") $Model
 
 function Test-Go2RtcReady {
     try {
@@ -39,7 +39,7 @@ function Test-Go2RtcReady {
 }
 
 Write-Host "========================================"
-Write-Host "  Pack House — Start"
+Write-Host "  Pack House - Start"
 Write-Host "========================================"
 Write-Host ""
 
@@ -51,7 +51,7 @@ if (-not (Test-Path $ModelPath)) {
 if (-not $SkipDocker) {
     Write-Host "[1/4] Starting camera bridge (Docker)..."
     if (-not (Test-Path (Join-Path $BridgeDir ".env"))) {
-        Write-Error "Missing .env — copy .env.example and set Eufy credentials."
+        Write-Error "Missing .env - copy .env.example and set Eufy credentials."
         exit 1
     }
     Push-Location $BridgeDir
@@ -78,7 +78,7 @@ for ($i = 1; $i -le 45; $i++) {
     if ($i % 5 -eq 0) { Write-Host "      still waiting... (${i}s)" }
 }
 if (-not $ready) {
-    Write-Warning "go2rtc not responding on :1984 — continuing anyway (stream may connect slowly)"
+    Write-Warning "go2rtc not responding on :1984 - continuing anyway (stream may connect slowly)"
 }
 
 Write-Host "[3/4] Python environment..."
@@ -97,7 +97,7 @@ Write-Host "      Device: $Device"
 if (-not $NoShow) {
     Write-Host "      Press Q in the video window to quit."
 } else {
-    Write-Host "      Headless — output under packhouse-runtime/runs/live/"
+    Write-Host "      Headless - output under packhouse-runtime/runs/live/"
 }
 Write-Host ""
 
