@@ -22,18 +22,24 @@ This will:
 
 1. Start the Eufy camera bridge (Docker)
 2. Wait for the RTSP stream on go2rtc
-3. Create a Python environment on first run (if needed)
+3. Call **`alerts.ps1`** for live detection (and truck-arrival POSTs when `ARRIVAL_API_*` is set in `.env`)
 4. Open a live video window with detection boxes (press **Q** to quit)
 
 Full documentation: **[RUN_GUIDE.md](RUN_GUIDE.md)**
 
 ## Truck arrival alerts
 
-When live detection sees `license_plate`, `car`, or `vehicle`, it can send:
+Run alerts independently (recommended):
+
+```powershell
+.\alerts.ps1
+```
+
+Or double-click **`alerts.bat`**. This loads `.env`, starts the camera bridge if needed, runs live detection, and POSTs when `license_plate`, `car`, or `vehicle` is detected.
 
 `POST /api/v1/receiving/truck-arrivals`
 
-Set these optional variables in `.env`:
+Set these variables in `.env`:
 
 ```env
 ARRIVAL_API_BASE_URL=http://localhost:8000
@@ -59,7 +65,9 @@ Payload sent by runtime:
 
 ```
 Hrvst-Hackathon/
-├── Start-PackHouse.ps1      ← run everything
+├── Start-PackHouse.ps1      ← camera + live vision (no alerts required)
+├── alerts.ps1               ← truck-arrival alerts (independent entry)
+├── scripts/                 ← shared Env + camera readiness helpers
 ├── RUN_GUIDE.md
 ├── docker-compose.yml       ← Eufy → RTSP bridge
 ├── bridge/                  ← eufyp2pstream (local build)
