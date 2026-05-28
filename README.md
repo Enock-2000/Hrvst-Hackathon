@@ -27,6 +27,34 @@ This will:
 
 Full documentation: **[RUN_GUIDE.md](RUN_GUIDE.md)**
 
+## Truck arrival alerts
+
+When live detection sees `license_plate`, `car`, or `vehicle`, it can send:
+
+`POST /api/v1/receiving/truck-arrivals`
+
+Set these optional variables in `.env`:
+
+```env
+ARRIVAL_API_BASE_URL=http://localhost:8000
+ARRIVAL_API_BEARER_TOKEN=replace-with-api-token
+ARRIVAL_ALERT_COOLDOWN_SEC=30
+ARRIVAL_ALERT_TIMEOUT_SEC=5
+```
+
+Payload sent by runtime:
+
+```json
+{
+  "truckPlate": "UNKNOWN",
+  "gateCameraId": "entrance",
+  "suggestedOrderIds": []
+}
+```
+
+- `gateCameraId` is always the runtime camera ID that produced the detection.
+- `truckPlate` is currently `"UNKNOWN"` until plate OCR text extraction is added.
+
 ## Project layout
 
 ```
