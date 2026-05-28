@@ -61,6 +61,30 @@ Payload sent by runtime:
 - `gateCameraId` is always the runtime camera ID that produced the detection.
 - `truckPlate` is currently `"UNKNOWN"` until plate OCR text extraction is added.
 
+## PPE / violation alerts (separate endpoint)
+
+When YOLO detects mapped violations (e.g. `no_ppe`, rotten produce), the runtime POSTs:
+
+`POST /api/v1/ppe/violations`
+
+Required body fields: `cameraId`, `violationType`. Optional: `confidence`, `detectedAt`, `imageUrl`, `metadata`.
+
+```json
+{
+  "cameraId": "entrance",
+  "violationType": "no_hairnet",
+  "confidence": 0.94,
+  "detectedAt": "2026-05-28T14:00:00Z",
+  "imageUrl": null,
+  "metadata": null
+}
+```
+
+- Label → `violationType` mapping: `packhouse-runtime/config/violation_alerts.yaml` (e.g. `no_ppe` → `no_hairnet`).
+- `cameraId` defaults to the camera key; override with `api_camera_id` in `packhouse-runtime/config/cameras.yaml`.
+- Uses `VIOLATION_API_*` in `.env`, or falls back to `ARRIVAL_API_*` for the same host/token.
+- Enabled automatically by `.\alerts.ps1` when API vars are set (`--violation-alerts`).
+
 ## Project layout
 
 ```

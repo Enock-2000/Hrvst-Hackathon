@@ -86,6 +86,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Enable truck-arrival POST alerts (requires ARRIVAL_API_* env; use .\\alerts.ps1)",
     )
+    p.add_argument(
+        "--violation-alerts",
+        action="store_true",
+        help="Enable PPE/quality POST alerts to /api/v1/ppe/violations (VIOLATION_API_* or ARRIVAL_API_*)",
+    )
     return p.parse_args()
 
 
@@ -158,6 +163,7 @@ def main() -> int:
     names = model.names
     print(f"  Classes:     {', '.join(names[i] for i in range(len(names)))}")
     from alerts import ArrivalAlertTracker
+    from violation_alerts import ViolationAlertTracker
 
     alert_tracker: ArrivalAlertTracker | None = None
     if args.alerts:
@@ -167,6 +173,15 @@ def main() -> int:
         alert_tracker = ArrivalAlertTracker.from_env(cam_id, required=False)
         if alert_tracker:
             print(f"  Arrival alerts: enabled -> {alert_tracker.describe()}")
+
+    violation_tracker: ViolationAlertTracker | None = None
+    if args.violation_alerts:
+        violation_tracker = ViolationAlertTracker.from_env(cam_id, required=True)
+        print(f"  Violation alerts: enabled -> {violation_tracker.describe()}")
+    else:
+        violation_tracker = ViolationAlertTracker.from_env(cam_id, required=False)
+        if violation_tracker:
+            print(f"  Violation alerts: enabled -> {violation_tracker.describe()}")
 
     predict_kw: dict = {
         "source": rtsp_url,
@@ -210,6 +225,8 @@ def main() -> int:
 
             if alert_tracker:
                 alert_tracker.maybe_alert(frame_idx, names, result.boxes)
+            if violation_tracker:
+                violation_tracker.maybe_alert(frame_idx, names, result.boxes)
 
             if args.max_frames > 0 and frame_idx >= args.max_frames:
                 print(f"Stopped after {args.max_frames} frames.")

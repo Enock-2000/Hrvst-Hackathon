@@ -1,0 +1,16 @@
+# YOLO class (display_names) -> API violationType for POST /api/v1/ppe/violations
+# Only mapped labels trigger alerts. Add rows when new model classes are trained.
+#
+# PPE / safety
+# Produce quality / inventory (rotten, stale)
+# dipping_time: add a class + mapping here when the model supports it
+
+label_to_violation_type:
+  no_ppe: no_hairnet
+  rotten_produce: rotten_produce
+  stale_tomato: stale_produce
+  rotten_banana: rotten_banana
+  rotten_carrot: rotten_carrot
+  rotten_mango: rotten_mango
+  rotten_potato: rotten_potato
+  rotten_pepper: rotten_pepper

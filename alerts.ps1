@@ -4,7 +4,7 @@
 
 .EXAMPLE
   .\alerts.ps1
-  Loads .env, starts camera bridge if needed, posts to /api/v1/receiving/truck-arrivals.
+  Loads .env, starts camera bridge if needed, posts truck-arrivals and PPE/quality violations.
 
 .EXAMPLE
   .\alerts.ps1 -SkipDocker -SkipCameraSetup
@@ -53,16 +53,28 @@ if (-not (Test-Path $envPath)) {
     $dotenv = Import-DotEnv $envPath
 }
 
-$enableAlerts = $false
+$enableArrivalAlerts = $false
+$enableViolationAlerts = $false
 if (Test-ArrivalAlertEnvConfigured $dotenv) {
     Set-ArrivalAlertEnv $dotenv
-    $enableAlerts = $true
-    Write-Host "  Alert API:  $env:ARRIVAL_API_BASE_URL/api/v1/receiving/truck-arrivals"
-} elseif ($RequireAlertApi) {
-    Write-Error "Missing ARRIVAL_API_BASE_URL or ARRIVAL_API_BEARER_TOKEN in .env."
+    $enableArrivalAlerts = $true
+    Write-Host "  Truck arrivals: $env:ARRIVAL_API_BASE_URL/api/v1/receiving/truck-arrivals"
+}
+if (Test-ViolationAlertEnvConfigured $dotenv) {
+    Set-ViolationAlertEnv $dotenv
+    $enableViolationAlerts = $true
+    $vBase = if ($env:VIOLATION_API_BASE_URL) { $env:VIOLATION_API_BASE_URL } else { $env:ARRIVAL_API_BASE_URL }
+    Write-Host "  Violations:     $vBase/api/v1/ppe/violations"
+}
+if ($RequireAlertApi -and -not $enableArrivalAlerts -and -not $enableViolationAlerts) {
+    Write-Error "Missing alert API config in .env (ARRIVAL_API_* and/or VIOLATION_API_*)."
     exit 1
-} else {
-    Write-Warning "ARRIVAL_API_* not set in .env; running vision without truck-arrival POSTs."
+}
+if (-not $enableArrivalAlerts -and -not $RequireAlertApi) {
+    Write-Warning "ARRIVAL_API_* not set; truck-arrival POSTs disabled."
+}
+if (-not $enableViolationAlerts -and -not $RequireAlertApi) {
+    Write-Warning "VIOLATION_API_* / ARRIVAL_API_* not set; violation POSTs disabled."
 }
 Write-Host ""
 
@@ -95,8 +107,8 @@ if (-not (Test-Path $VenvActivate)) {
 }
 . $VenvActivate
 
-if ($enableAlerts) {
-    Write-Host "[vision] Live detection + arrival alerts..."
+if ($enableArrivalAlerts -or $enableViolationAlerts) {
+    Write-Host "[vision] Live detection + API alerts..."
 } else {
     Write-Host "[vision] Live detection..."
 }
@@ -106,7 +118,8 @@ $pyArgs = @(
     "--device", $Device,
     "--conf", $Conf
 )
-if ($enableAlerts) { $pyArgs += "--alerts" }
+if ($enableArrivalAlerts) { $pyArgs += "--alerts" }
+if ($enableViolationAlerts) { $pyArgs += "--violation-alerts" }
 if ($Camera) { $pyArgs += @("--camera", $Camera) }
 if (-not $NoShow) { $pyArgs += "--show" }
 if ($Track) { $pyArgs += "--track" }

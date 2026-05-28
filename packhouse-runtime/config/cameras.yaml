@@ -6,6 +6,8 @@ default_camera: entrance
 cameras:
   entrance:
     name: "Living room / entrance (Eufy)"
+    # Optional: value sent as cameraId on violation API (defaults to camera key "entrance")
+    # api_camera_id: "CAM 1"
     rtsp: "rtsp://127.0.0.1:8554/living_room"
     # Optional JPEG fallback (lower FPS): http://127.0.0.1:1984/api/frame.jpeg?src=living_room
     goals:

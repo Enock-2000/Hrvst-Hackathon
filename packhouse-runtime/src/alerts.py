@@ -9,12 +9,11 @@ Or import from live_inference when alerts are enabled via environment variables.
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 import time
-from urllib import error as url_error
-from urllib import request as url_request
+
+from alert_http import post_json
 
 TRUCK_ARRIVAL_PATH = "/api/v1/receiving/truck-arrivals"
 TRIGGER_LABELS = frozenset({"license_plate", "car", "vehicle"})
@@ -74,26 +73,14 @@ def build_truck_arrival_payload(camera_id: str, truck_plate: str = "UNKNOWN") ->
 
 def post_truck_arrival_alert(config: dict[str, float | str], camera_id: str) -> bool:
     payload = build_truck_arrival_payload(camera_id)
-    req = url_request.Request(
-        url=f"{config['base_url']}{TRUCK_ARRIVAL_PATH}",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {config['bearer_token']}",
-        },
-        method="POST",
+    return post_json(
+        base_url=str(config["base_url"]),
+        path=TRUCK_ARRIVAL_PATH,
+        bearer_token=str(config["bearer_token"]),
+        payload=payload,
+        timeout_sec=float(config["timeout_sec"]),
+        log_label=f"Arrival alert (gateCameraId={camera_id})",
     )
-    timeout_sec = float(config["timeout_sec"])
-    try:
-        with url_request.urlopen(req, timeout=timeout_sec) as resp:
-            status = resp.getcode()
-        print(f"  Arrival alert sent (status={status}, gateCameraId={camera_id}).")
-        return True
-    except url_error.HTTPError as e:
-        print(f"  Arrival alert failed: HTTP {e.code} {e.reason}", file=sys.stderr)
-    except url_error.URLError as e:
-        print(f"  Arrival alert failed: {e.reason}", file=sys.stderr)
-    return False
 
 
 class ArrivalAlertTracker:

@@ -61,3 +61,35 @@ function Set-ArrivalAlertEnv {
         $env:ARRIVAL_ALERT_TIMEOUT_SEC = $Vars["ARRIVAL_ALERT_TIMEOUT_SEC"]
     }
 }
+
+function Test-ViolationAlertEnvConfigured {
+    param([hashtable]$Vars)
+    $base = $Vars["VIOLATION_API_BASE_URL"]
+    if ([string]::IsNullOrWhiteSpace($base)) { $base = $Vars["ARRIVAL_API_BASE_URL"] }
+    $token = $Vars["VIOLATION_API_BEARER_TOKEN"]
+    if ([string]::IsNullOrWhiteSpace($token)) { $token = $Vars["ARRIVAL_API_BEARER_TOKEN"] }
+    return (-not [string]::IsNullOrWhiteSpace($base)) -and (-not [string]::IsNullOrWhiteSpace($token))
+}
+
+function Set-ViolationAlertEnv {
+    param([hashtable]$Vars)
+    if (-not (Test-ViolationAlertEnvConfigured $Vars)) {
+        throw "Missing VIOLATION_API_* or ARRIVAL_API_* in .env (required for violation alerts)."
+    }
+    if ($Vars.ContainsKey("VIOLATION_API_BASE_URL") -and -not [string]::IsNullOrWhiteSpace($Vars["VIOLATION_API_BASE_URL"])) {
+        $env:VIOLATION_API_BASE_URL = $Vars["VIOLATION_API_BASE_URL"]
+    } elseif ($Vars.ContainsKey("ARRIVAL_API_BASE_URL")) {
+        $env:VIOLATION_API_BASE_URL = $Vars["ARRIVAL_API_BASE_URL"]
+    }
+    if ($Vars.ContainsKey("VIOLATION_API_BEARER_TOKEN") -and -not [string]::IsNullOrWhiteSpace($Vars["VIOLATION_API_BEARER_TOKEN"])) {
+        $env:VIOLATION_API_BEARER_TOKEN = $Vars["VIOLATION_API_BEARER_TOKEN"]
+    } elseif ($Vars.ContainsKey("ARRIVAL_API_BEARER_TOKEN")) {
+        $env:VIOLATION_API_BEARER_TOKEN = $Vars["ARRIVAL_API_BEARER_TOKEN"]
+    }
+    if ($Vars.ContainsKey("VIOLATION_ALERT_COOLDOWN_SEC") -and -not [string]::IsNullOrWhiteSpace($Vars["VIOLATION_ALERT_COOLDOWN_SEC"])) {
+        $env:VIOLATION_ALERT_COOLDOWN_SEC = $Vars["VIOLATION_ALERT_COOLDOWN_SEC"]
+    }
+    if ($Vars.ContainsKey("VIOLATION_ALERT_TIMEOUT_SEC") -and -not [string]::IsNullOrWhiteSpace($Vars["VIOLATION_ALERT_TIMEOUT_SEC"])) {
+        $env:VIOLATION_ALERT_TIMEOUT_SEC = $Vars["VIOLATION_ALERT_TIMEOUT_SEC"]
+    }
+}
