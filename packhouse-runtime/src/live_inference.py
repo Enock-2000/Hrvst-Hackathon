@@ -12,11 +12,15 @@ Run from repo root:
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import sys
 import time
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
+from urllib import error as url_error
+from urllib import request as url_request
 
 import yaml
 
@@ -35,6 +39,75 @@ CORE_CLASSES = {
     "ppe",
     "no_ppe",
 }
+
+
+def read_float_env(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        print(f"Invalid {name}='{raw}', using default {default}.", file=sys.stderr)
+        return default
+
+
+def load_arrival_alert_config() -> dict[str, float | str] | None:
+    base_url = os.getenv("ARRIVAL_API_BASE_URL", "").strip()
+    bearer_token = os.getenv("ARRIVAL_API_BEARER_TOKEN", "").strip()
+    if not base_url or not bearer_token:
+        print("  Arrival alerts: disabled (set ARRIVAL_API_BASE_URL and ARRIVAL_API_BEARER_TOKEN).")
+        return None
+    return {
+        "base_url": base_url.rstrip("/"),
+        "bearer_token": bearer_token,
+        "cooldown_sec": read_float_env("ARRIVAL_ALERT_COOLDOWN_SEC", 30.0),
+        "timeout_sec": read_float_env("ARRIVAL_ALERT_TIMEOUT_SEC", 5.0),
+    }
+
+
+def detect_arrival_signal(names: dict, boxes) -> tuple[str, float] | None:
+    if boxes is None or len(boxes) == 0:
+        return None
+    trigger_labels = {"license_plate", "car", "vehicle"}
+    best: tuple[str, float] | None = None
+    confs = boxes.conf.tolist() if boxes.conf is not None else []
+    for idx, cls_id in enumerate(boxes.cls.int().tolist()):
+        label = names[int(cls_id)]
+        if label.lower() not in trigger_labels:
+            continue
+        conf = float(confs[idx]) if idx < len(confs) else 0.0
+        if best is None or conf > best[1]:
+            best = (label, conf)
+    return best
+
+
+def post_truck_arrival_alert(config: dict[str, float | str], camera_id: str) -> bool:
+    payload = {
+        "truckPlate": "UNKNOWN",
+        "gateCameraId": camera_id,
+        "suggestedOrderIds": [],
+    }
+    req = url_request.Request(
+        url=f"{config['base_url']}/api/v1/receiving/truck-arrivals",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {config['bearer_token']}",
+        },
+        method="POST",
+    )
+    timeout_sec = float(config["timeout_sec"])
+    try:
+        with url_request.urlopen(req, timeout=timeout_sec) as resp:
+            status = resp.getcode()
+        print(f"  Arrival alert sent (status={status}, gateCameraId={camera_id}).")
+        return True
+    except url_error.HTTPError as e:
+        print(f"  Arrival alert failed: HTTP {e.code} {e.reason}", file=sys.stderr)
+    except url_error.URLError as e:
+        print(f"  Arrival alert failed: {e.reason}", file=sys.stderr)
+    return False
 
 
 def load_cameras_config() -> dict:
@@ -152,6 +225,14 @@ def main() -> int:
     apply_names_to_model(model)
     names = model.names
     print(f"  Classes:     {', '.join(names[i] for i in range(len(names)))}")
+    alert_config = load_arrival_alert_config()
+    last_arrival_alert_ts = 0.0
+    if alert_config:
+        print(
+            "  Arrival alerts: enabled -> "
+            f"{alert_config['base_url']}/api/v1/receiving/truck-arrivals "
+            f"(cooldown={alert_config['cooldown_sec']}s)"
+        )
 
     predict_kw: dict = {
         "source": rtsp_url,
@@ -193,6 +274,19 @@ def main() -> int:
             if args.log_every > 0 and frame_idx % args.log_every == 0:
                 print_detection_summary(frame_idx, names, result.boxes)
 
+            signal = detect_arrival_signal(names, result.boxes)
+            if signal and alert_config:
+                now = time.time()
+                cooldown_sec = float(alert_config["cooldown_sec"])
+                if now - last_arrival_alert_ts >= cooldown_sec:
+                    label, conf = signal
+                    print(
+                        f"  [frame {frame_idx}] arrival trigger={label} conf={conf:.2f}; "
+                        "posting /api/v1/receiving/truck-arrivals"
+                    )
+                    post_truck_arrival_alert(alert_config, cam_id)
+                    last_arrival_alert_ts = now
+
             if args.max_frames > 0 and frame_idx >= args.max_frames:
                 print(f"Stopped after {args.max_frames} frames.")
                 break
@@ -201,8 +295,18 @@ def main() -> int:
     except KeyboardInterrupt:
         print("\nStopped by user.")
     except Exception as e:
+        err = str(e).lower()
         print(f"\nStream error: {e}", file=sys.stderr)
-        print("Check: docker compose ps (repo root), open http://localhost:1984/", file=sys.stderr)
+        if "404" in err or "describe failed" in err:
+            print(
+                "RTSP stream not ready (camera bridge). From repo root:\n"
+                "  1. Fill and SAVE .env (EUFY_USERNAME, EUFY_PASSWORD, EUFY_COUNTRY)\n"
+                "  2. .\\Start-PackHouse.ps1  (waits for frames before YOLO)\n"
+                "  3. Test: http://localhost:1984/stream.html?src=living_room",
+                file=sys.stderr,
+            )
+        else:
+            print("Check: docker compose ps (repo root), open http://localhost:1984/", file=sys.stderr)
         return 1
 
     print(f"Processed {frame_idx} frames.")
