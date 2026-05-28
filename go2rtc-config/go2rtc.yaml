@@ -36,3 +36,18 @@ streams:
         -x264-params keyint=30:min-keyint=30:scenecut=0:repeat-headers=1
         -bsf:v dump_extra=freq=keyframe
         -rtsp_transport tcp -f rtsp {output}"
+
+  # Garage Eufy camera (T8170T10250241C5) — separate P2P bridge instance
+  garage:
+    - "exec:ffmpeg -hide_banner -loglevel warning
+        -thread_queue_size 512 -an -sn -dn
+        -analyzeduration 1200000 -probesize 1000000
+        -fflags +discardcorrupt+nobuffer -flags low_delay
+        -f hevc -i tcp://eufyp2pstream_garage:63346?timeout=10000000
+        -vf scale=1920:-2:in_range=full:out_range=tv,format=yuv420p
+        -c:v libx264 -preset ultrafast -tune zerolatency
+        -profile:v main -pix_fmt yuv420p
+        -bf 0 -g 30 -r 15 -an
+        -x264-params keyint=30:min-keyint=30:scenecut=0:repeat-headers=1
+        -bsf:v dump_extra=freq=keyframe
+        -rtsp_transport tcp -f rtsp {output}"

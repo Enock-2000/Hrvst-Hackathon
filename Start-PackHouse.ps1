@@ -13,12 +13,17 @@
 .EXAMPLE
   .\Start-PackHouse.ps1 -Device xpu
   Use Intel XPU for inference (requires torch+xpu in venv).
+
+.EXAMPLE
+  .\Start-PackHouse.ps1 -Camera garage
+  YOLO on the garage camera (see config/cameras.yaml).
 #>
 param(
     [switch]$NoShow,
     [string]$Device = "cpu",
     [string]$Model = "packhouse_best.pt",
-    [float]$Conf = 0.35,
+    [float]$Conf = 0.65,
+    [string]$Camera = "entrance",
     [switch]$Track,
     [switch]$SkipDocker
 )
@@ -92,6 +97,7 @@ if (-not (Test-Path $VenvActivate)) {
 . $VenvActivate
 
 Write-Host "[4/4] Starting live detection..."
+Write-Host "      Camera: $Camera"
 Write-Host "      Model: $Model"
 Write-Host "      Device: $Device"
 if (-not $NoShow) {
@@ -103,6 +109,7 @@ Write-Host ""
 
 $pyArgs = @(
     "src\live_inference.py",
+    "--camera", $Camera,
     "--model", $ModelPath,
     "--device", $Device,
     "--conf", $Conf

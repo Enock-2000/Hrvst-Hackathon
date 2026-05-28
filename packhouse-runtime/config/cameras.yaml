@@ -13,7 +13,15 @@ cameras:
       - license_plate
       - produce_crate
 
-# Future cameras (add go2rtc streams first):
+  garage:
+    name: "Garage (Eufy T8170)"
+    rtsp: "rtsp://127.0.0.1:8554/garage"
+    goals:
+      - delivery_detection
+      - produce_crate
+      - worker
+
+# Future cameras (add eufyp2pstream_* service + go2rtc stream first):
 #  weighing:
 #    rtsp: rtsp://127.0.0.1:8554/weighing
 #  wash:

@@ -14,6 +14,7 @@ services:
     volumes:
       - ./eufy-data:/data
 
+  # Living room / entrance (from devices.json)
   eufyp2pstream:
     build: ./bridge
     container_name: eufyp2pstream
@@ -21,6 +22,25 @@ services:
     environment:
       - EUFY_WS_HOST=eufy-security-ws
       - EUFY_WS_PORT=3000
+      - EUFY_DEVICE_SERIAL=T8170T1026063339
+      - EUFY_VIDEO_PORT=63336
+      - EUFY_AUDIO_PORT=63337
+      - EUFY_BACKCHANNEL_PORT=63338
+    depends_on:
+      - eufy-security-ws
+
+  # Garage camera — one eufyp2pstream container per camera
+  eufyp2pstream_garage:
+    build: ./bridge
+    container_name: eufyp2pstream_garage
+    restart: unless-stopped
+    environment:
+      - EUFY_WS_HOST=eufy-security-ws
+      - EUFY_WS_PORT=3000
+      - EUFY_DEVICE_SERIAL=T8170T10250241C5
+      - EUFY_VIDEO_PORT=63346
+      - EUFY_AUDIO_PORT=63347
+      - EUFY_BACKCHANNEL_PORT=63348
     depends_on:
       - eufy-security-ws
 
@@ -37,3 +57,4 @@ services:
       - ./go2rtc-config:/config
     depends_on:
       - eufyp2pstream
+      - eufyp2pstream_garage

@@ -82,6 +82,30 @@ DRIVER_CONNECT_MESSAGE = {"messageId": "driver_connect", "command": "driver.conn
 
 run_event = threading.Event()
 
+# Per-container config (one eufyp2pstream instance per camera)
+PINNED_SERIAL = os.environ.get("EUFY_DEVICE_SERIAL", "").strip()
+VIDEO_PORT = int(os.environ.get("EUFY_VIDEO_PORT", "63336"))
+AUDIO_PORT = int(os.environ.get("EUFY_AUDIO_PORT", "63337"))
+BACKCHANNEL_PORT = int(os.environ.get("EUFY_BACKCHANNEL_PORT", "63338"))
+
+
+def _resolve_serial_from_devices(devices: list) -> str:
+    """Pick camera serial: pinned env wins, else last device in list."""
+    if PINNED_SERIAL:
+        for dev in devices:
+            sn = dev if isinstance(dev, str) else dev.get("serialNumber")
+            if sn == PINNED_SERIAL:
+                return sn
+        return PINNED_SERIAL
+    serial = ""
+    for dev in devices:
+        if isinstance(dev, str):
+            serial = dev
+        elif isinstance(dev, dict) and "serialNumber" in dev:
+            serial = dev["serialNumber"]
+    return serial
+
+
 def exit_handler(signum, frame):
     print(f'Signal handler called with signal {signum}')
     run_event.set()
@@ -364,21 +388,24 @@ class ClientRecvThread(threading.Thread):
 
 class Connector:
     def __init__(self, run_event):
-        video_sock.bind(("0.0.0.0", 63336))
+        if PINNED_SERIAL:
+            print(f"[CONFIG] Pinned device serial: {PINNED_SERIAL}")
+        print(f"[CONFIG] TCP ports video={VIDEO_PORT} audio={AUDIO_PORT} backchannel={BACKCHANNEL_PORT}")
+        video_sock.bind(("0.0.0.0", VIDEO_PORT))
         video_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         video_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         video_sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, SOCKET_BUFFER_SIZE)
         video_sock.settimeout(0.5)  # Faster accept response
         video_sock.listen(32)  # Increased backlog for reconnect-heavy clients
         
-        audio_sock.bind(("0.0.0.0", 63337))
+        audio_sock.bind(("0.0.0.0", AUDIO_PORT))
         audio_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         audio_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         audio_sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, SOCKET_BUFFER_SIZE)
         audio_sock.settimeout(0.5)  # Faster accept response
         audio_sock.listen(32)  # Increased backlog for reconnect-heavy clients
         
-        backchannel_sock.bind(("0.0.0.0", 63338))
+        backchannel_sock.bind(("0.0.0.0", BACKCHANNEL_PORT))
         backchannel_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         backchannel_sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         backchannel_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -388,7 +415,7 @@ class Connector:
         
         self.ws = None
         self.run_event = run_event
-        self.serialno = ""
+        self.serialno = PINNED_SERIAL
         self.loop = None
         self.ws_closed_event: Optional[asyncio.Event] = None
         self.livestream_active = False
@@ -940,11 +967,9 @@ class Connector:
                 states = message_result["state"]
                 # `devices` can be an array of strings (serial numbers) or full device objects
                 devices = states.get("devices") or []
-                for dev in devices:
-                    if isinstance(dev, str):
-                        self.serialno = dev
-                    elif isinstance(dev, dict) and "serialNumber" in dev:
-                        self.serialno = dev["serialNumber"]
+                resolved = _resolve_serial_from_devices(devices)
+                if resolved:
+                    self.serialno = resolved
 
                 # Create the TCP accept threads once. On websocket reconnect, just refresh serialno.
                 if not hasattr(self, "video_thread") or not self.video_thread.is_alive():

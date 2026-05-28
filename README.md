@@ -46,6 +46,7 @@ Hrvst-Hackathon/
 
 ```powershell
 .\Start-PackHouse.ps1 -NoShow              # no window; save annotated video
+.\Start-PackHouse.ps1 -Camera garage       # YOLO on garage camera
 .\Start-PackHouse.ps1 -Device xpu          # Intel GPU inference
 .\Start-PackHouse.ps1 -Track               # object tracking IDs
 .\Start-PackHouse.ps1 -SkipDocker          # vision only (bridge already running)
@@ -55,8 +56,9 @@ Hrvst-Hackathon/
 
 | Use | URL |
 |-----|-----|
-| Browser | http://localhost:1984/stream.html?src=living_room |
-| RTSP (YOLO / VLC) | `rtsp://127.0.0.1:8554/living_room` |
+| Browser (entrance) | http://localhost:1984/stream.html?src=living_room |
+| Browser (garage) | http://localhost:1984/stream.html?src=garage |
+| RTSP (YOLO / VLC) | `rtsp://127.0.0.1:8554/living_room` or `.../garage` |
 | go2rtc dashboard | http://localhost:1984/ |
 
 ---
@@ -86,8 +88,9 @@ Wait ~20 s, then open http://localhost:1984/
 ### Adding cameras
 
 1. Find `serialNumber` via the WS API or `devices.json`.
-2. One `eufyp2pstream` container per camera (separate TCP port range).
-3. Add a `streams.<name>:` entry in `go2rtc-config/go2rtc.yaml`.
+2. Duplicate the `eufyp2pstream_garage` block in `docker-compose.yml` (unique `EUFY_DEVICE_SERIAL` + TCP ports).
+3. Add a `streams.<name>:` entry in `go2rtc-config/go2rtc.yaml` pointing at that container.
+4. Add the camera in `packhouse-runtime/config/cameras.yaml`.
 
 ### Bridge troubleshooting
 
