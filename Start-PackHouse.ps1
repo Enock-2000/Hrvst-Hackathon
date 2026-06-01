@@ -15,15 +15,15 @@
   Use Intel XPU for inference (requires torch+xpu in venv).
 
 .EXAMPLE
-  .\Start-PackHouse.ps1 -Camera garage
-  YOLO on the garage camera (see config/cameras.yaml).
+  .\Start-PackHouse.ps1 -Camera sorting_1
+  YOLO on the sorting 1 camera (see config/cameras.yaml).
 #>
 param(
     [switch]$NoShow,
     [string]$Device = "cpu",
     [string]$Model = "packhouse_best.pt",
     [float]$Conf = 0.65,
-    [string]$Camera = "entrance",
+    [string]$Camera = "second_wash_dipping",
     [switch]$Track,
     [switch]$SkipDocker
 )
@@ -33,7 +33,14 @@ $Root = $PSScriptRoot
 $BridgeDir = $Root
 $VisionDir = Join-Path $Root "packhouse-runtime"
 $ModelPath = Join-Path (Join-Path $VisionDir "models") $Model
-$Go2RtcStreamSrc = "living_room"
+$Go2RtcStreamByCamera = @{
+    first_drying_stage   = "first_drying_stage"
+    sorting_1            = "sorting_1"
+    indoor_receiving     = "indoor_receiving"
+    second_wash_dipping  = "second_wash_dipping"
+}
+$Go2RtcStreamSrc = $Go2RtcStreamByCamera[$Camera]
+if (-not $Go2RtcStreamSrc) { $Go2RtcStreamSrc = $Camera }
 
 function Import-DotEnv {
     param([string]$Path)
@@ -194,7 +201,7 @@ if (-not $framesReady) {
     Write-Error @"
 No video frames on rtsp://127.0.0.1:8554/$Go2RtcStreamSrc (RTSP 404 until the bridge is healthy).
   Browser test: http://localhost:1984/stream.html?src=$Go2RtcStreamSrc
-  Logs: docker logs eufyp2pstream ; docker logs go2rtc
+  Logs: docker logs eufyp2pstream_first_drying_stage ; docker logs go2rtc
 "@
     exit 1
 }

@@ -121,7 +121,7 @@ def resolve_rtsp(camera_id: str | None, rtsp_override: str | None) -> tuple[str,
     if rtsp_override:
         return rtsp_override, "custom"
     cfg = load_cameras_config()
-    cam_key = camera_id or cfg.get("default_camera", "entrance")
+    cam_key = camera_id or cfg.get("default_camera", "first_drying_stage")
     cameras = cfg.get("cameras") or {}
     if cam_key not in cameras:
         raise KeyError(f"Unknown camera '{cam_key}'. Options: {list(cameras)}")
@@ -302,7 +302,7 @@ def main() -> int:
                 "RTSP stream not ready (camera bridge). From repo root:\n"
                 "  1. Fill and SAVE .env (EUFY_USERNAME, EUFY_PASSWORD, EUFY_COUNTRY)\n"
                 "  2. .\\Start-PackHouse.ps1  (waits for frames before YOLO)\n"
-                "  3. Test: http://localhost:1984/stream.html?src=living_room",
+                "  3. Test: http://localhost:1984/stream.html?src=first_drying_stage",
                 file=sys.stderr,
             )
         else:

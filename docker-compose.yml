@@ -1,60 +1,246 @@
 services:
+
   eufy-security-ws:
+
     image: bropat/eufy-security-ws:latest
+
     container_name: eufy-security-ws
+
     restart: unless-stopped
+
     ports:
+
       - "3000:3000"
+
     environment:
+
       - USERNAME=${EUFY_USERNAME}
+
       - PASSWORD=${EUFY_PASSWORD}
+
       - COUNTRY=${EUFY_COUNTRY:-US}
+
       - TRUSTED_DEVICE_NAME=eufyBridge
+
       - WS_LISTEN_PORT=3000
+
     volumes:
+
       - ./eufy-data:/data
 
-  # Living room / entrance (from devices.json)
-  eufyp2pstream:
+
+
+  # Mutex: Eufy HomeBase allows only one P2P livestream at a time
+
+  stream-coordinator:
+
     build: ./bridge
-    container_name: eufyp2pstream
+
+    container_name: stream-coordinator
+
     restart: unless-stopped
+
+    entrypoint: ["python3", "-u", "/app/stream_coordinator.py"]
+
+    ports:
+
+      - "8090:8090"
+
     environment:
+
+      - COORDINATOR_PORT=8090
+
+      - COORDINATOR_LEASE_SEC=45
+
+
+
+  # First Drying Stage (T8170T1026063339)
+
+  eufyp2pstream_first_drying_stage:
+
+    build: ./bridge
+
+    container_name: eufyp2pstream_first_drying_stage
+
+    restart: unless-stopped
+
+    environment:
+
       - EUFY_WS_HOST=eufy-security-ws
+
       - EUFY_WS_PORT=3000
+
       - EUFY_DEVICE_SERIAL=T8170T1026063339
+
       - EUFY_VIDEO_PORT=63336
+
       - EUFY_AUDIO_PORT=63337
+
       - EUFY_BACKCHANNEL_PORT=63338
+
+      - EUFY_COORDINATOR_URL=http://stream-coordinator:8090
+
+      - EUFY_STREAM_NAME=first_drying_stage
+
     depends_on:
+
       - eufy-security-ws
 
-  # Garage camera — one eufyp2pstream container per camera
-  eufyp2pstream_garage:
+      - stream-coordinator
+
+
+
+  eufyp2pstream_sorting_1:
+
     build: ./bridge
-    container_name: eufyp2pstream_garage
+
+    container_name: eufyp2pstream_sorting_1
+
     restart: unless-stopped
+
     environment:
+
       - EUFY_WS_HOST=eufy-security-ws
+
       - EUFY_WS_PORT=3000
+
       - EUFY_DEVICE_SERIAL=T8170T10250241C5
+
       - EUFY_VIDEO_PORT=63346
+
       - EUFY_AUDIO_PORT=63347
+
       - EUFY_BACKCHANNEL_PORT=63348
+
+      - EUFY_COORDINATOR_URL=http://stream-coordinator:8090
+
+      - EUFY_STREAM_NAME=sorting_1
+
     depends_on:
+
       - eufy-security-ws
+
+      - stream-coordinator
+
+
+
+  eufyp2pstream_indoor_receiving:
+
+    build: ./bridge
+
+    container_name: eufyp2pstream_indoor_receiving
+
+    restart: unless-stopped
+
+    environment:
+
+      - EUFY_WS_HOST=eufy-security-ws
+
+      - EUFY_WS_PORT=3000
+
+      - EUFY_DEVICE_SERIAL=T8170T1026063614
+
+      - EUFY_VIDEO_PORT=63356
+
+      - EUFY_AUDIO_PORT=63357
+
+      - EUFY_BACKCHANNEL_PORT=63358
+
+      - EUFY_COORDINATOR_URL=http://stream-coordinator:8090
+
+      - EUFY_STREAM_NAME=indoor_receiving
+
+    depends_on:
+
+      - eufy-security-ws
+
+      - stream-coordinator
+
+
+
+  eufyp2pstream_second_wash_dipping:
+
+    build: ./bridge
+
+    container_name: eufyp2pstream_second_wash_dipping
+
+    restart: unless-stopped
+
+    environment:
+
+      - EUFY_WS_HOST=eufy-security-ws
+
+      - EUFY_WS_PORT=3000
+
+      - EUFY_DEVICE_SERIAL=T8170T10260600D3
+
+      - EUFY_VIDEO_PORT=63366
+
+      - EUFY_AUDIO_PORT=63367
+
+      - EUFY_BACKCHANNEL_PORT=63368
+
+      - EUFY_COORDINATOR_URL=http://stream-coordinator:8090
+
+      - EUFY_STREAM_NAME=second_wash_dipping
+
+    depends_on:
+
+      - eufy-security-ws
+
+      - stream-coordinator
+
+
+
+  packhouse-dashboard:
+
+    image: nginx:alpine
+
+    container_name: packhouse-dashboard
+
+    restart: unless-stopped
+
+    ports:
+
+      - "8080:80"
+
+    volumes:
+
+      - ./packhouse-runtime/www:/usr/share/nginx/html:ro
+
+
 
   go2rtc:
+
     image: alexxit/go2rtc:latest
+
     container_name: go2rtc
+
     restart: unless-stopped
+
     ports:
-      - "1984:1984"   # web UI / HTTP API / MSE / HLS
-      - "8554:8554"   # RTSP
-      - "8555:8555/tcp"   # WebRTC TCP
-      - "8555:8555/udp"   # WebRTC UDP
+
+      - "1984:1984"
+
+      - "8554:8554"
+
+      - "8555:8555/tcp"
+
+      - "8555:8555/udp"
+
     volumes:
+
       - ./go2rtc-config:/config
+
     depends_on:
-      - eufyp2pstream
-      - eufyp2pstream_garage
+
+      - stream-coordinator
+
+      - eufyp2pstream_first_drying_stage
+
+      - eufyp2pstream_sorting_1
+
+      - eufyp2pstream_indoor_receiving
+
+      - eufyp2pstream_second_wash_dipping
+

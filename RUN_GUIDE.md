@@ -66,7 +66,7 @@ Optional (not used by default):
 Eufy camera
     → Docker stack (repo root)
         eufy-security-ws → eufyp2pstream → go2rtc
-    → RTSP rtsp://127.0.0.1:8554/living_room
+    → RTSP rtsp://127.0.0.1:8554/first_drying_stage
     → packhouse-runtime (YOLO)
     → Live window / saved video
 ```
@@ -109,7 +109,7 @@ Eufy camera
 docker compose up -d
 ```
 
-Verify: http://localhost:1984/stream.html?src=living_room
+Verify: http://localhost:8080/dashboard.html (rotating) or http://localhost:1984/stream.html?src=second_wash_dipping
 
 ### Vision only (bridge already running)
 
@@ -147,16 +147,31 @@ Labels on screen use readable names from `packhouse-runtime/config/class_names.y
 |------|---------|
 | 3000 | Eufy WebSocket API (control) |
 | 1984 | go2rtc web UI + snapshots |
+| 8080 | Pack House rotating camera dashboard |
+| 8090 | P2P livestream coordinator (mutex) |
 | 8554 | **RTSP** (used by YOLO) |
 | 8555 | WebRTC |
 
 | URL | Purpose |
 |-----|---------|
-| http://localhost:1984/ | go2rtc dashboard |
-| http://localhost:1984/stream.html?src=living_room | Browser live view |
-| `rtsp://127.0.0.1:8554/living_room` | VLC / YOLO |
+| http://localhost:8080/dashboard.html | **Recommended** — one camera at a time (carousel) |
+| http://localhost:1984/stream.html?src=first_drying_stage | Solo first drying stage view |
+| http://localhost:1984/stream.html?src=sorting_1 | Solo sorting 1 view |
+| http://localhost:1984/stream.html?src=indoor_receiving | Solo indoor receiving view |
+| http://localhost:1984/stream.html?src=second_wash_dipping | Solo second wash & dipping view |
+| http://localhost:8090/status | Which camera holds the P2P slot |
+| `rtsp://127.0.0.1:8554/<stream>` | VLC / YOLO (`first_drying_stage`, `sorting_1`, `indoor_receiving`, `second_wash_dipping`) |
 
 Camera RTSP URL is configured in `packhouse-runtime/config/cameras.yaml`.
+
+### Multi-camera limitation (HomeBase)
+
+All T8170 cameras on one HomeBase share **one** Eufy P2P livestream slot ([eufy-security-ws #15](https://github.com/bropat/eufy-security-ws/issues/15)). Opening go2rtc’s 4-up grid starts four ffmpeg probes at once; only one camera receives HEVC — others show `Could not find codec parameters`.
+
+This repo uses:
+
+- **`stream-coordinator`** — mutex so bridges take turns on `start_livestream`
+- **`packhouse-dashboard`** — browser carousel (one active player)
 
 ---
 
@@ -222,7 +237,7 @@ Camera RTSP URL is configured in `packhouse-runtime/config/cameras.yaml`.
 
 - Zone-based inventory and database logging
 - License plate OCR and scale OCR
-- Multi-camera support
-- Web dashboard
+- Simultaneous multi-P2P (blocked by Eufy HomeBase; use carousel dashboard)
+- Web dashboard with YOLO overlays
 
 Training is done offline; deploy only the `models/*.pt` files produced from training.

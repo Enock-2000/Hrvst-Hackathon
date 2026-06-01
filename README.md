@@ -47,7 +47,7 @@ Payload sent by runtime:
 ```json
 {
   "truckPlate": "UNKNOWN",
-  "gateCameraId": "entrance",
+  "gateCameraId": "first_drying_stage",
   "suggestedOrderIds": []
 }
 ```
@@ -74,7 +74,10 @@ Hrvst-Hackathon/
 
 ```powershell
 .\Start-PackHouse.ps1 -NoShow              # no window; save annotated video
-.\Start-PackHouse.ps1 -Camera garage       # YOLO on garage camera
+.\Start-PackHouse.ps1 -Camera first_drying_stage     # YOLO on first drying stage
+.\Start-PackHouse.ps1 -Camera sorting_1              # YOLO on sorting 1 camera
+.\Start-PackHouse.ps1 -Camera indoor_receiving        # YOLO on indoor receiving
+.\Start-PackHouse.ps1 -Camera second_wash_dipping     # YOLO on second wash & dipping
 .\Start-PackHouse.ps1 -Device xpu          # Intel GPU inference
 .\Start-PackHouse.ps1 -Track               # object tracking IDs
 .\Start-PackHouse.ps1 -SkipDocker          # vision only (bridge already running)
@@ -84,10 +87,16 @@ Hrvst-Hackathon/
 
 | Use | URL |
 |-----|-----|
-| Browser (entrance) | http://localhost:1984/stream.html?src=living_room |
-| Browser (garage) | http://localhost:1984/stream.html?src=garage |
-| RTSP (YOLO / VLC) | `rtsp://127.0.0.1:8554/living_room` or `.../garage` |
-| go2rtc dashboard | http://localhost:1984/ |
+| **Pack House dashboard** (rotating) | http://localhost:8080/dashboard.html |
+| Browser (first drying stage) | http://localhost:1984/stream.html?src=first_drying_stage |
+| Browser (sorting 1) | http://localhost:1984/stream.html?src=sorting_1 |
+| Browser (indoor receiving) | http://localhost:1984/stream.html?src=indoor_receiving |
+| Browser (second wash & dipping) | http://localhost:1984/stream.html?src=second_wash_dipping |
+| RTSP (YOLO / VLC) | `rtsp://127.0.0.1:8554/<stream>` — `first_drying_stage`, `sorting_1`, `indoor_receiving`, `second_wash_dipping` |
+| go2rtc stream list | http://localhost:1984/ |
+| Coordinator status | http://localhost:8090/status |
+
+**Note:** Eufy HomeBase allows **one P2P livestream at a time**. Do not use the go2rtc 4-up grid on a single HomeBase — use the rotating dashboard or solo stream URLs.
 
 ---
 
@@ -116,7 +125,7 @@ Wait ~20 s, then open http://localhost:1984/
 ### Adding cameras
 
 1. Find `serialNumber` via the WS API or `devices.json`.
-2. Duplicate the `eufyp2pstream_garage` block in `docker-compose.yml` (unique `EUFY_DEVICE_SERIAL` + TCP ports).
+2. Duplicate the `eufyp2pstream_sorting_1` block in `docker-compose.yml` (unique `EUFY_DEVICE_SERIAL` + TCP ports).
 3. Add a `streams.<name>:` entry in `go2rtc-config/go2rtc.yaml` pointing at that container.
 4. Add the camera in `packhouse-runtime/config/cameras.yaml`.
 
@@ -125,6 +134,7 @@ Wait ~20 s, then open http://localhost:1984/
 | Symptom | Fix |
 |---------|-----|
 | Black MSE video | Wait ~10 s or switch to **WebRTC** |
+| `Could not find codec parameters` (HEVC) on 2+ tiles | HomeBase allows **one** P2P stream — use http://localhost:8080/dashboard.html or solo `stream.html?src=` URLs |
 | `LIVESTREAM Start debounced` | `docker compose restart` (~25 s) |
 | `data partitioning is not implemented` | Use `-f hevc` in go2rtc ffmpeg pipeline |
 | `exec entrypoint.sh: no such file` | Rebuild — Dockerfile strips Windows CRLF |

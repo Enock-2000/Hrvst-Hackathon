@@ -1,25 +1,41 @@
 # Pack house cameras — RTSP from go2rtc (repo root docker compose)
 # Start bridge first: docker compose up -d  (or .\Start-PackHouse.ps1)
 
-default_camera: entrance
+default_camera: second_wash_dipping
 
 cameras:
-  entrance:
-    name: "Living room / entrance (Eufy)"
-    rtsp: "rtsp://127.0.0.1:8554/living_room"
-    # Optional JPEG fallback (lower FPS): http://127.0.0.1:1984/api/frame.jpeg?src=living_room
+  first_drying_stage:
+    name: "First Drying Stage (Eufy T8170)"
+    rtsp: "rtsp://127.0.0.1:8554/first_drying_stage"
+    # Optional JPEG fallback (lower FPS): http://127.0.0.1:1984/api/frame.jpeg?src=first_drying_stage
     goals:
       - delivery_detection
       - license_plate
       - produce_crate
 
-  garage:
-    name: "Garage (Eufy T8170)"
-    rtsp: "rtsp://127.0.0.1:8554/garage"
+  sorting_1:
+    name: "Sorting 1 (Eufy T8170)"
+    rtsp: "rtsp://127.0.0.1:8554/sorting_1"
     goals:
       - delivery_detection
       - produce_crate
       - worker
+
+  indoor_receiving:
+    name: "Indoor Receiving (Eufy T8170)"
+    rtsp: "rtsp://127.0.0.1:8554/indoor_receiving"
+    goals:
+      - delivery_detection
+      - license_plate
+      - worker
+
+  second_wash_dipping:
+    name: "Second Wash & Dipping (Eufy T8170)"
+    rtsp: "rtsp://127.0.0.1:8554/second_wash_dipping"
+    goals:
+      - delivery_detection
+      - license_plate
+      - produce_crate
 
 # Future cameras (add eufyp2pstream_* service + go2rtc stream first):
 #  weighing:
