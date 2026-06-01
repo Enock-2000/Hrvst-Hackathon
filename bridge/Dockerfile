@@ -9,7 +9,7 @@ RUN apk add --no-cache --virtual .build-deps build-base \
  && apk del --no-cache --purge .build-deps
 
 WORKDIR /app
-COPY eufyp2pstream.py websocket.py entrypoint.sh /app/
+COPY eufyp2pstream.py websocket.py entrypoint.sh stream_coordinator.py /app/
 
 # Replace the hard-coded HA addon hostname with the EUFY_WS_HOST env var
 # (script imports `os` already, so this is safe).

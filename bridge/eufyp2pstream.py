@@ -10,6 +10,8 @@ import sys
 import signal
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import os
+import urllib.error
+import urllib.request
 from queue import Empty, Queue
 from typing import Any, Optional, Tuple
 
@@ -87,6 +89,79 @@ PINNED_SERIAL = os.environ.get("EUFY_DEVICE_SERIAL", "").strip()
 VIDEO_PORT = int(os.environ.get("EUFY_VIDEO_PORT", "63336"))
 AUDIO_PORT = int(os.environ.get("EUFY_AUDIO_PORT", "63337"))
 BACKCHANNEL_PORT = int(os.environ.get("EUFY_BACKCHANNEL_PORT", "63338"))
+COORDINATOR_URL = os.environ.get("EUFY_COORDINATOR_URL", "").strip().rstrip("/")
+STREAM_NAME = os.environ.get("EUFY_STREAM_NAME", PINNED_SERIAL or "camera")
+COORDINATOR_ACQUIRE_TIMEOUT = int(os.environ.get("EUFY_COORDINATOR_ACQUIRE_TIMEOUT", "120"))
+
+
+def _coordinator_post(path: str, payload: dict) -> tuple[int, dict]:
+    url = f"{COORDINATOR_URL}{path}"
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        body = resp.read()
+        return resp.status, json.loads(body) if body else {}
+
+
+def coordinator_acquire(serial: str, name: str, timeout_sec: int = COORDINATOR_ACQUIRE_TIMEOUT) -> bool:
+    """Block until this camera holds the HomeBase P2P livestream slot."""
+    if not COORDINATOR_URL or not serial:
+        return True
+    deadline = time.time() + timeout_sec
+    while time.time() < deadline and not run_event.is_set():
+        try:
+            code, body = _coordinator_post(
+                "/acquire", {"serial": serial, "name": name or serial}
+            )
+            if code == 200:
+                preempted = body.get("preempted_serial")
+                if preempted:
+                    print(f"[COORD] acquired slot (preempted {preempted})")
+                else:
+                    print(f"[COORD] acquired slot for {serial}")
+                sys.stdout.flush()
+                return True
+        except urllib.error.HTTPError as e:
+            print(f"[COORD] acquire HTTP {e.code}, retrying...")
+            sys.stdout.flush()
+        except Exception as e:
+            print(f"[COORD] acquire error: {e}, retrying...")
+            sys.stdout.flush()
+        time.sleep(2.0)
+    print(f"[COORD] acquire timed out after {timeout_sec}s for {serial}")
+    sys.stdout.flush()
+    return False
+
+
+def coordinator_release(serial: str) -> None:
+    if not COORDINATOR_URL or not serial:
+        return
+    try:
+        _coordinator_post("/release", {"serial": serial})
+        print(f"[COORD] released slot for {serial}")
+        sys.stdout.flush()
+    except Exception as e:
+        print(f"[COORD] release error: {e}")
+        sys.stdout.flush()
+
+
+def coordinator_renew(serial: str) -> bool:
+    if not COORDINATOR_URL or not serial:
+        return True
+    try:
+        code, _body = _coordinator_post("/renew", {"serial": serial})
+        return code == 200
+    except urllib.error.HTTPError as e:
+        return e.code != 409
+    except Exception as e:
+        print(f"[COORD] renew error: {e}")
+        sys.stdout.flush()
+        return True
 
 
 def _resolve_serial_from_devices(devices: list) -> str:
@@ -449,6 +524,23 @@ class Connector:
         self.event_stats_audio_count = 0
         self.event_stats_start_time = time.time()
         self.stats_reporter_task: Optional[asyncio.Task] = None
+        self._coordinator_holds_slot = False
+        if COORDINATOR_URL:
+            threading.Thread(
+                target=self._coordinator_renew_loop,
+                name="CoordinatorRenew",
+                daemon=True,
+            ).start()
+
+    def _coordinator_renew_loop(self) -> None:
+        while not self.run_event.is_set():
+            time.sleep(10.0)
+            if not self.livestream_active or not self.serialno:
+                continue
+            if not coordinator_renew(self.serialno):
+                print(f"[COORD] lost lease for {self.serialno}, stopping livestream")
+                sys.stdout.flush()
+                self.schedule_stop_livestream()
 
     def stop(self):
         try:
@@ -694,6 +786,17 @@ class Connector:
                 print(f"[LIVESTREAM] Start debounced (active={self.livestream_active})")
                 sys.stdout.flush()
                 return
+
+            acquired = await asyncio.to_thread(
+                coordinator_acquire,
+                self.serialno,
+                STREAM_NAME,
+            )
+            if not acquired:
+                print(f"[LIVESTREAM] Coordinator denied start for {self.serialno}")
+                sys.stdout.flush()
+                return
+            self._coordinator_holds_slot = True
             
             self.livestream_active = True
             self.last_livestream_start = current_time
@@ -709,6 +812,9 @@ class Connector:
                 print(f"[LIVESTREAM] Error starting livestream: {e}")
                 sys.stdout.flush()
                 self.livestream_active = False
+                if self._coordinator_holds_slot:
+                    await asyncio.to_thread(coordinator_release, self.serialno)
+                    self._coordinator_holds_slot = False
 
     async def _stop_livestream(self):
         if not self.ws or not self.serialno:
@@ -736,6 +842,10 @@ class Connector:
             except Exception as e:
                 print(f"[LIVESTREAM] Error stopping livestream: {e}")
                 sys.stdout.flush()
+            finally:
+                if self._coordinator_holds_slot and self.serialno:
+                    await asyncio.to_thread(coordinator_release, self.serialno)
+                    self._coordinator_holds_slot = False
 
     async def _start_talkback(self):
         if not self.ws or not self.serialno:
