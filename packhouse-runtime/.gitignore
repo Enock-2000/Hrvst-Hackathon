@@ -1,4 +1,7 @@
 .venv/
+.venv-locateanything/
 runs/
 __pycache__/
 *.pyc
+models/LocateAnything-3B/
+*.pt

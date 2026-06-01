@@ -1,43 +1,31 @@
 <#
 .SYNOPSIS
-  Start the full Pack House deployment: Eufy camera bridge + live YOLO detection.
+  Pack House: Eufy bridge (coordinator + go2rtc) + LocateAnything-3B live detection (CUDA).
 
 .EXAMPLE
   .\Start-PackHouse.ps1
-  Starts Docker (if needed), waits for RTSP, opens live view with bounding boxes.
-
-.EXAMPLE
-  .\Start-PackHouse.ps1 -NoShow
-  Headless mode - saves annotated video under packhouse-runtime/runs/live/
-
-.EXAMPLE
-  .\Start-PackHouse.ps1 -Device xpu
-  Use Intel XPU for inference (requires torch+xpu in venv).
-
-.EXAMPLE
-  .\Start-PackHouse.ps1 -Camera sorting_1
-  YOLO on the sorting 1 camera (see config/cameras.yaml).
+  .\Start-PackHouse.ps1 -Camera sorting_1 -Device cuda:0
+  .\Start-PackHouse.ps1 -SkipDocker
 #>
 param(
     [switch]$NoShow,
-    [string]$Device = "cpu",
-    [string]$Model = "packhouse_best.pt",
-    [float]$Conf = 0.65,
+    [string]$Device = "cuda:0",
     [string]$Camera = "second_wash_dipping",
-    [switch]$Track,
-    [switch]$SkipDocker
+    [switch]$AllCameras,
+    [switch]$SkipDocker,
+    [int]$EveryNFrames = 0
 )
 
 $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
-$BridgeDir = $Root
 $VisionDir = Join-Path $Root "packhouse-runtime"
-$ModelPath = Join-Path (Join-Path $VisionDir "models") $Model
+$ModelDir = Join-Path $VisionDir "models\LocateAnything-3B"
+
 $Go2RtcStreamByCamera = @{
-    first_drying_stage   = "first_drying_stage"
-    sorting_1            = "sorting_1"
-    indoor_receiving     = "indoor_receiving"
-    second_wash_dipping  = "second_wash_dipping"
+    first_drying_stage  = "first_drying_stage"
+    sorting_1           = "sorting_1"
+    indoor_receiving    = "indoor_receiving"
+    second_wash_dipping = "second_wash_dipping"
 }
 $Go2RtcStreamSrc = $Go2RtcStreamByCamera[$Camera]
 if (-not $Go2RtcStreamSrc) { $Go2RtcStreamSrc = $Camera }
@@ -63,38 +51,25 @@ function Import-DotEnv {
 
 function Set-EufyComposeEnv {
     param([hashtable]$Vars)
-    $required = @("EUFY_USERNAME", "EUFY_PASSWORD")
-    foreach ($key in $required) {
+    foreach ($key in @("EUFY_USERNAME", "EUFY_PASSWORD")) {
         if (-not $Vars.ContainsKey($key) -or [string]::IsNullOrWhiteSpace($Vars[$key])) {
-            throw "Missing or empty $key in .env (save the file after editing .env.example)."
+            throw "Missing or empty $key in .env"
         }
     }
     $env:EUFY_USERNAME = $Vars["EUFY_USERNAME"]
     $env:EUFY_PASSWORD = $Vars["EUFY_PASSWORD"]
-    if ($Vars.ContainsKey("EUFY_COUNTRY") -and -not [string]::IsNullOrWhiteSpace($Vars["EUFY_COUNTRY"])) {
-        $env:EUFY_COUNTRY = $Vars["EUFY_COUNTRY"]
-    } elseif (-not $env:EUFY_COUNTRY) {
-        $env:EUFY_COUNTRY = "US"
-    }
+    $env:EUFY_COUNTRY = if ($Vars["EUFY_COUNTRY"]) { $Vars["EUFY_COUNTRY"] } else { "US" }
 }
 
 function Test-DockerServiceRunning {
     param([string]$Name)
-    try {
-        $status = docker inspect -f "{{.State.Status}}" $Name 2>$null
-        return $status -eq "running"
-    } catch {
-        return $false
-    }
+    try { return (docker inspect -f "{{.State.Status}}" $Name 2>$null) -eq "running" } catch { return $false }
 }
 
 function Test-Go2RtcReady {
     try {
-        $r = Invoke-WebRequest -Uri "http://localhost:1984/api/streams" -UseBasicParsing -TimeoutSec 3
-        return $r.StatusCode -eq 200
-    } catch {
-        return $false
-    }
+        return (Invoke-WebRequest -Uri "http://localhost:1984/api/streams" -UseBasicParsing -TimeoutSec 3).StatusCode -eq 200
+    } catch { return $false }
 }
 
 function Test-Go2RtcStreamFrames {
@@ -102,81 +77,63 @@ function Test-Go2RtcStreamFrames {
     try {
         $r = Invoke-WebRequest -Uri "http://localhost:1984/api/frame.jpeg?src=$Src" -UseBasicParsing -TimeoutSec 8
         return ($r.StatusCode -eq 200) -and ($r.RawContentLength -gt 500)
-    } catch {
-        return $false
+    } catch { return $false }
+}
+
+function Get-PackHousePython {
+    param([string]$RuntimeDir)
+    foreach ($name in @(".venv", ".venv-locateanything")) {
+        $py = Join-Path $RuntimeDir "$name\Scripts\python.exe"
+        if (Test-Path $py) { return $py }
     }
+    return $null
 }
 
 Write-Host "========================================"
-Write-Host "  Pack House - Start"
+Write-Host "  Pack House — LocateAnything"
 Write-Host "========================================"
 Write-Host ""
 
-if (-not (Test-Path $ModelPath)) {
-    Write-Error "Model not found: $ModelPath"
+if (-not (Test-Path (Join-Path $ModelDir "config.json"))) {
+    Write-Error @"
+LocateAnything weights not found at packhouse-runtime\models\LocateAnything-3B
+  Run: cd packhouse-runtime ; .\scripts\Download-LocateAnythingModel.ps1
+  Copy the full repo (including models\) to your NVIDIA GPU PC.
+"@
     exit 1
+}
+
+if ($AllCameras) {
+    Write-Warning "Eufy HomeBase allows one P2P stream at a time. Multi-camera view may show only the active stream."
 }
 
 if (-not $SkipDocker) {
     Write-Host "[1/4] Starting camera bridge (Docker)..."
-    $envPath = Join-Path $BridgeDir ".env"
-    if (-not (Test-Path $envPath)) {
-        Write-Error "Missing .env - copy .env.example to .env and set Eufy credentials."
-        exit 1
-    }
-    if ((Get-Item $envPath).Length -eq 0) {
-        Write-Error ".env is empty. Copy .env.example to .env, fill EUFY_USERNAME/EUFY_PASSWORD/EUFY_COUNTRY, and save the file."
-        exit 1
-    }
-    try {
-        $dotenv = Import-DotEnv $envPath
-        Set-EufyComposeEnv $dotenv
-    } catch {
-        Write-Error $_.Exception.Message
-        exit 1
-    }
-    Push-Location $BridgeDir
+    $envPath = Join-Path $Root ".env"
+    if (-not (Test-Path $envPath)) { Write-Error "Missing .env — copy .env.example and set Eufy credentials." }
+    if ((Get-Item $envPath).Length -eq 0) { Write-Error ".env is empty." }
+    Set-EufyComposeEnv (Import-DotEnv $envPath)
+    Push-Location $Root
     docker compose up -d --build
-    if ($LASTEXITCODE -ne 0) {
-        Pop-Location
-        Write-Error "docker compose failed. Is Docker Desktop running?"
-        exit 1
-    }
+    if ($LASTEXITCODE -ne 0) { Pop-Location; Write-Error "docker compose failed."; exit 1 }
     Pop-Location
 } else {
     Write-Host "[1/4] Skipping Docker (-SkipDocker)"
 }
 
-Write-Host "[2/4] Waiting for camera stream..."
-$apiReady = $false
+Write-Host "[2/4] Waiting for camera stream ($Go2RtcStreamSrc)..."
 for ($i = 1; $i -le 30; $i++) {
-    if (Test-Go2RtcReady) {
-        $apiReady = $true
-        break
-    }
+    if (Test-Go2RtcReady) { break }
     Start-Sleep -Seconds 2
-}
-if (-not $apiReady) {
-    Write-Warning "go2rtc not responding on :1984 - check: docker compose ps"
 }
 
 if (-not $SkipDocker) {
-    $wsOk = $false
     for ($i = 1; $i -le 30; $i++) {
-        if (Test-DockerServiceRunning "eufy-security-ws") {
-            $wsOk = $true
-            break
-        }
+        if (Test-DockerServiceRunning "eufy-security-ws") { break }
         Start-Sleep -Seconds 2
-        if ($i % 5 -eq 0) { Write-Host "      waiting for eufy-security-ws..." }
     }
-    if (-not $wsOk) {
-        Write-Error @"
-eufy-security-ws is not running (bad/missing .env credentials or first-time login).
-  1. Ensure .env has EUFY_USERNAME, EUFY_PASSWORD, EUFY_COUNTRY and is saved.
-  2. docker logs eufy-security-ws
-  3. docker compose up -d
-"@
+    if (-not (Test-DockerServiceRunning "eufy-security-ws")) {
+        Write-Error "eufy-security-ws not running. Check .env and: docker logs eufy-security-ws"
         exit 1
     }
 }
@@ -185,59 +142,44 @@ $framesReady = $false
 for ($i = 1; $i -le 90; $i++) {
     if (Test-Go2RtcStreamFrames $Go2RtcStreamSrc) {
         $framesReady = $true
-        Write-Host "      camera stream ready (${i}s) - $Go2RtcStreamSrc"
+        Write-Host "      stream ready (${i}s) - $Go2RtcStreamSrc"
         break
     }
     Start-Sleep -Seconds 2
-    if ($i % 10 -eq 0) {
-        Write-Host "      waiting for video frames from $Go2RtcStreamSrc..."
-        if (-not $SkipDocker -and -not (Test-DockerServiceRunning "eufy-security-ws")) {
-            Write-Error "eufy-security-ws stopped. Run: docker logs eufy-security-ws"
-            exit 1
-        }
-    }
+    if ($i % 10 -eq 0) { Write-Host "      waiting for frames from $Go2RtcStreamSrc..." }
 }
 if (-not $framesReady) {
     Write-Error @"
-No video frames on rtsp://127.0.0.1:8554/$Go2RtcStreamSrc (RTSP 404 until the bridge is healthy).
-  Browser test: http://localhost:1984/stream.html?src=$Go2RtcStreamSrc
-  Logs: docker logs eufyp2pstream_first_drying_stage ; docker logs go2rtc
+No video frames on rtsp://127.0.0.1:8554/$Go2RtcStreamSrc
+  Dashboard: http://localhost:8080/dashboard.html
+  Solo view: http://localhost:1984/stream.html?src=$Go2RtcStreamSrc
+  Coordinator: http://localhost:8090/status
+  Logs: docker logs eufyp2pstream_$Go2RtcStreamSrc ; docker logs go2rtc
 "@
     exit 1
 }
 
 Write-Host "[3/4] Python environment..."
 Push-Location $VisionDir
-$VenvActivate = Join-Path $VisionDir ".venv\Scripts\Activate.ps1"
-if (-not (Test-Path $VenvActivate)) {
-    Write-Host "      Creating .venv and installing dependencies (first run only)..."
-    python -m venv .venv
-    & (Join-Path $VisionDir ".venv\Scripts\pip.exe") install -r requirements.txt
+$Python = Get-PackHousePython $VisionDir
+if (-not $Python) {
+    Write-Host "      Installing .venv (first run)..."
+    & (Join-Path $VisionDir "scripts\Install.ps1")
+    $Python = Get-PackHousePython $VisionDir
 }
-. $VenvActivate
+if (-not $Python) { Write-Error "venv missing. Run packhouse-runtime\scripts\Install.ps1"; exit 1 }
 
-Write-Host "[4/4] Starting live detection..."
-Write-Host "      Camera: $Camera"
-Write-Host "      Model: $Model"
-Write-Host "      Device: $Device"
-if (-not $NoShow) {
-    Write-Host "      Press Q in the video window to quit."
-} else {
-    Write-Host "      Headless - output under packhouse-runtime/runs/live/"
-}
+Write-Host "[4/4] LocateAnything live detection..."
+Write-Host "      Camera: $Camera  Device: $Device"
+if (-not $NoShow) { Write-Host "      Press Q to quit." }
 Write-Host ""
 
-$pyArgs = @(
-    "src\live_inference.py",
-    "--camera", $Camera,
-    "--model", $ModelPath,
-    "--device", $Device,
-    "--conf", $Conf
-)
+$pyArgs = @("src\live_inference.py", "--device", $Device)
+if ($EveryNFrames -gt 0) { $pyArgs += @("--every-n-frames", $EveryNFrames) }
+if ($AllCameras) { $pyArgs += "--all-cameras" } else { $pyArgs += @("--camera", $Camera) }
 if (-not $NoShow) { $pyArgs += "--show" }
-if ($Track) { $pyArgs += "--track" }
 
-python @pyArgs
+& $Python @pyArgs
 $code = $LASTEXITCODE
 Pop-Location
 exit $code

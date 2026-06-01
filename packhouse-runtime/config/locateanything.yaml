@@ -1,0 +1,24 @@
+# LocateAnything-3B — https://huggingface.co/nvidia/LocateAnything-3B
+# Download weights: .\scripts\Download-LocateAnythingModel.ps1
+
+# Local folder (copy whole packhouse-runtime to NVIDIA PC with this directory populated)
+model_path: models/LocateAnything-3B
+
+# Hugging Face repo id — used only if model_path is missing on disk
+model_id: nvidia/LocateAnything-3B
+
+categories:
+  - car
+  - truck
+
+generation_mode: hybrid
+max_new_tokens: 2048
+temperature: 0.7
+verbose_generate: false
+
+default_confidence: 1.0
+min_conf: 0.0
+min_area_px: 400
+resize_short_side: 768
+every_n_frames: 2
+attn_implementation: sdpa

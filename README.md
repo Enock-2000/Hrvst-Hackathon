@@ -1,151 +1,90 @@
 # Hrvst Hackathon — Pack House Vision
 
-Live pack-house monitoring: **Eufy camera → RTSP → YOLO detection** with real-time bounding boxes.
+Live pack-house monitoring: **Eufy cameras → go2rtc → NVIDIA [LocateAnything-3B](https://huggingface.co/nvidia/LocateAnything-3B)** (car / truck detection, CUDA).
 
-Includes a Docker bridge for Eufy cameras that **do not support native RTSP** (e.g. T8170 Indoor Cam Pan & Tilt), plus a Python runtime for live object detection.
+Includes a Docker bridge for Eufy cameras without native RTSP, a **stream coordinator** (one HomeBase P2P stream at a time), and a rotating **dashboard** at http://localhost:8080/dashboard.html.
 
-## One-command start
-
-Clone, configure credentials, then run:
+## One-command start (NVIDIA GPU PC)
 
 ```powershell
 git clone https://github.com/Enock-2000/Hrvst-Hackathon.git
 cd Hrvst-Hackathon
 copy .env.example .env
-# edit .env with your Eufy account
+# edit .env with Eufy credentials
+
+cd packhouse-runtime
+.\scripts\Install.ps1
+.\scripts\Download-LocateAnythingModel.ps1   # ~7.6 GB, once
+
+cd ..
 .\Start-PackHouse.ps1
 ```
 
 Or double-click **`Start-PackHouse.bat`**.
 
-This will:
-
-1. Start the Eufy camera bridge (Docker)
-2. Wait for the RTSP stream on go2rtc
-3. Create a Python environment on first run (if needed)
-4. Open a live video window with detection boxes (press **Q** to quit)
-
 Full documentation: **[RUN_GUIDE.md](RUN_GUIDE.md)**
 
-## Truck arrival alerts
+## Cameras
 
-When live detection sees `license_plate`, `car`, or `vehicle`, it can send:
+| Camera ID | go2rtc stream |
+|-----------|----------------|
+| `first_drying_stage` | first_drying_stage |
+| `sorting_1` | sorting_1 |
+| `indoor_receiving` | indoor_receiving |
+| `second_wash_dipping` | second_wash_dipping (default) |
 
-`POST /api/v1/receiving/truck-arrivals`
-
-Set these optional variables in `.env`:
-
-```env
-ARRIVAL_API_BASE_URL=http://localhost:8000
-ARRIVAL_API_BEARER_TOKEN=replace-with-api-token
-ARRIVAL_ALERT_COOLDOWN_SEC=30
-ARRIVAL_ALERT_TIMEOUT_SEC=5
+```powershell
+.\Start-PackHouse.ps1 -Camera sorting_1
 ```
 
-Payload sent by runtime:
+**Note:** Eufy HomeBase allows **one P2P livestream at a time**. Use the [rotating dashboard](http://localhost:8080/dashboard.html) or solo stream URLs — not a 4-up go2rtc grid on one HomeBase.
 
-```json
-{
-  "truckPlate": "UNKNOWN",
-  "gateCameraId": "first_drying_stage",
-  "suggestedOrderIds": []
-}
-```
+## Transfer workflow
 
-- `gateCameraId` is always the runtime camera ID that produced the detection.
-- `truckPlate` is currently `"UNKNOWN"` until plate OCR text extraction is added.
-
-## Project layout
-
-```
-Hrvst-Hackathon/
-├── Start-PackHouse.ps1      ← run everything
-├── RUN_GUIDE.md
-├── docker-compose.yml       ← Eufy → RTSP bridge
-├── bridge/                  ← eufyp2pstream (local build)
-├── go2rtc-config/
-├── packhouse-runtime/       ← YOLO live detection
-│   ├── models/              ← packhouse_best.pt (required)
-│   ├── config/
-│   └── src/
-```
+1. Run `Download-LocateAnythingModel.ps1` on any PC with internet (~7.3 GB → `packhouse-runtime/models/LocateAnything-3B/`).
+2. Copy the whole repo (including `models/LocateAnything-3B/`) to a machine with an **NVIDIA GPU**.
+3. `Install.ps1` + `Start-PackHouse.ps1` on the GPU PC.
 
 ## Options
 
 ```powershell
-.\Start-PackHouse.ps1 -NoShow              # no window; save annotated video
-.\Start-PackHouse.ps1 -Camera first_drying_stage     # YOLO on first drying stage
-.\Start-PackHouse.ps1 -Camera sorting_1              # YOLO on sorting 1 camera
-.\Start-PackHouse.ps1 -Camera indoor_receiving        # YOLO on indoor receiving
-.\Start-PackHouse.ps1 -Camera second_wash_dipping     # YOLO on second wash & dipping
-.\Start-PackHouse.ps1 -Device xpu          # Intel GPU inference
-.\Start-PackHouse.ps1 -Track               # object tracking IDs
-.\Start-PackHouse.ps1 -SkipDocker          # vision only (bridge already running)
+.\Start-PackHouse.ps1 -Camera indoor_receiving -Device cuda:0
+.\Start-PackHouse.ps1 -EveryNFrames 3
+.\Start-PackHouse.ps1 -SkipDocker
+.\Start-PackHouse.ps1 -NoShow
 ```
 
-## Stream URLs (when bridge is running)
+## Stream URLs (bridge running)
 
 | Use | URL |
 |-----|-----|
-| **Pack House dashboard** (rotating) | http://localhost:8080/dashboard.html |
-| Browser (first drying stage) | http://localhost:1984/stream.html?src=first_drying_stage |
-| Browser (sorting 1) | http://localhost:1984/stream.html?src=sorting_1 |
-| Browser (indoor receiving) | http://localhost:1984/stream.html?src=indoor_receiving |
-| Browser (second wash & dipping) | http://localhost:1984/stream.html?src=second_wash_dipping |
-| RTSP (YOLO / VLC) | `rtsp://127.0.0.1:8554/<stream>` — `first_drying_stage`, `sorting_1`, `indoor_receiving`, `second_wash_dipping` |
-| go2rtc stream list | http://localhost:1984/ |
+| Rotating dashboard | http://localhost:8080/dashboard.html |
+| Browser (solo) | http://localhost:1984/stream.html?src=second_wash_dipping |
+| RTSP | rtsp://127.0.0.1:8554/\<stream\> |
 | Coordinator status | http://localhost:8090/status |
+| go2rtc | http://localhost:1984/ |
 
-**Note:** Eufy HomeBase allows **one P2P livestream at a time**. Do not use the go2rtc 4-up grid on a single HomeBase — use the rotating dashboard or solo stream URLs.
+## Truck arrival alerts
 
----
+Optional `.env` variables: `ARRIVAL_API_BASE_URL`, `ARRIVAL_API_BEARER_TOKEN` — posts when **car** or **truck** is detected.
 
-## Camera bridge architecture
+## Layout
 
 ```
-+---------------------+     +----------------+     +------------+
-|  eufy-security-ws   | --> |  eufyp2pstream | --> |  go2rtc    |
-|  port 3000 (WS API) |     | tcp 63336 HEVC |     | 1984 / UI  |
-|                     |     | tcp 63337 AAC  |     | 8554 RTSP  |
-+---------------------+     +----------------+     +------------+
+Hrvst-Hackathon/
+├── Start-PackHouse.ps1
+├── docker-compose.yml       # eufy-security-ws, coordinator, 4× bridge, go2rtc, dashboard
+├── bridge/                  # eufyp2pstream + stream_coordinator
+├── go2rtc-config/
+└── packhouse-runtime/
+    ├── models/LocateAnything-3B/   # downloaded weights (gitignored)
+    ├── config/locateanything.yaml
+    └── src/live_inference.py
 ```
-
-* **`eufy-security-ws`** ([bropat/eufy-security-ws](https://github.com/bropat/eufy-security-ws)) — Eufy cloud + P2P, WebSocket API on `:3000`.
-* **`eufyp2pstream`** (built from `bridge/`, [oischinger/eufyp2pstream](https://github.com/oischinger/eufyp2pstream)) — raw HEVC/AAC on TCP ports for ffmpeg.
-* **`go2rtc`** ([AlexxIT/go2rtc](https://github.com/AlexxIT/go2rtc)) — transcodes to browser-friendly H.264 and publishes RTSP/MSE/WebRTC.
-
-### Manual bridge only
-
-```powershell
-docker compose up -d --build
-```
-
-Wait ~20 s, then open http://localhost:1984/
-
-### Adding cameras
-
-1. Find `serialNumber` via the WS API or `devices.json`.
-2. Duplicate the `eufyp2pstream_sorting_1` block in `docker-compose.yml` (unique `EUFY_DEVICE_SERIAL` + TCP ports).
-3. Add a `streams.<name>:` entry in `go2rtc-config/go2rtc.yaml` pointing at that container.
-4. Add the camera in `packhouse-runtime/config/cameras.yaml`.
-
-### Bridge troubleshooting
-
-| Symptom | Fix |
-|---------|-----|
-| Black MSE video | Wait ~10 s or switch to **WebRTC** |
-| `Could not find codec parameters` (HEVC) on 2+ tiles | HomeBase allows **one** P2P stream — use http://localhost:8080/dashboard.html or solo `stream.html?src=` URLs |
-| `LIVESTREAM Start debounced` | `docker compose restart` (~25 s) |
-| `data partitioning is not implemented` | Use `-f hevc` in go2rtc ffmpeg pipeline |
-| `exec entrypoint.sh: no such file` | Rebuild — Dockerfile strips Windows CRLF |
-
-## Security
-
-* Credentials only in `.env` (gitignored).
-* `eufy-data/persistent.json` contains auth tokens — never commit; rotate Eufy password if leaked.
 
 ## Credits
 
-* [bropat/eufy-security-ws](https://github.com/bropat/eufy-security-ws)
-* [oischinger/eufyp2pstream](https://github.com/oischinger/eufyp2pstream)
-* [AlexxIT/go2rtc](https://github.com/AlexxIT/go2rtc)
+- [bropat/eufy-security-ws](https://github.com/bropat/eufy-security-ws)
+- [oischinger/eufyp2pstream](https://github.com/oischinger/eufyp2pstream)
+- [AlexxIT/go2rtc](https://github.com/AlexxIT/go2rtc)
+- [nvidia/LocateAnything-3B](https://huggingface.co/nvidia/LocateAnything-3B)

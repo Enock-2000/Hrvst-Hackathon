@@ -1,4 +1,15 @@
-# Live pack house vision (RTSP → YOLO)
-ultralytics>=8.3.0
-opencv-python>=4.8.0
+# Pack House — LocateAnything live detection (CUDA on NVIDIA GPU)
+# Install: .\scripts\Install.ps1
+# PyTorch CUDA is installed by Install.ps1 (Python 3.12 recommended).
+
+opencv-python-headless>=4.8.0
 pyyaml>=6.0
+transformers==4.57.1
+numpy>=1.25.0
+Pillow>=11.0.0
+peft>=0.13.0
+decord==0.6.0
+lmdb==1.7.5
+huggingface_hub>=0.26.0
+accelerate>=1.0.0
+safetensors>=0.4.0

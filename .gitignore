@@ -31,9 +31,13 @@ Thumbs.db
 
 # Python / vision runtime
 packhouse-runtime/.venv/
+packhouse-runtime/.venv-locateanything/
 **/__pycache__/
 *.pyc
 packhouse-runtime/runs/
+packhouse-runtime/models/LocateAnything-3B/
+*.pt
+_test_*.jpg
 
 # Local test captures (not for git)
 camera_test_snapshot.jpg
