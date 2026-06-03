@@ -192,6 +192,108 @@ services:
 
 
 
+  eufyp2pstream_outdoor_receiving:
+
+    build: ./bridge
+
+    container_name: eufyp2pstream_outdoor_receiving
+
+    restart: unless-stopped
+
+    environment:
+
+      - EUFY_WS_HOST=eufy-security-ws
+
+      - EUFY_WS_PORT=3000
+
+      - EUFY_DEVICE_SERIAL=T8170T1025511F94
+
+      - EUFY_VIDEO_PORT=63376
+
+      - EUFY_AUDIO_PORT=63377
+
+      - EUFY_BACKCHANNEL_PORT=63378
+
+      - EUFY_COORDINATOR_URL=http://stream-coordinator:8090
+
+      - EUFY_STREAM_NAME=outdoor_receiving
+
+    depends_on:
+
+      - eufy-security-ws
+
+      - stream-coordinator
+
+
+
+  eufyp2pstream_drying_dispatch:
+
+    build: ./bridge
+
+    container_name: eufyp2pstream_drying_dispatch
+
+    restart: unless-stopped
+
+    environment:
+
+      - EUFY_WS_HOST=eufy-security-ws
+
+      - EUFY_WS_PORT=3000
+
+      - EUFY_DEVICE_SERIAL=T8170T1025512B16
+
+      - EUFY_VIDEO_PORT=63386
+
+      - EUFY_AUDIO_PORT=63387
+
+      - EUFY_BACKCHANNEL_PORT=63388
+
+      - EUFY_COORDINATOR_URL=http://stream-coordinator:8090
+
+      - EUFY_STREAM_NAME=drying_dispatch
+
+    depends_on:
+
+      - eufy-security-ws
+
+      - stream-coordinator
+
+
+
+  eufyp2pstream_entrance:
+
+    build: ./bridge
+
+    container_name: eufyp2pstream_entrance
+
+    restart: unless-stopped
+
+    environment:
+
+      - EUFY_WS_HOST=eufy-security-ws
+
+      - EUFY_WS_PORT=3000
+
+      - EUFY_DEVICE_SERIAL=T8172P1025501C43
+
+      - EUFY_VIDEO_PORT=63396
+
+      - EUFY_AUDIO_PORT=63397
+
+      - EUFY_BACKCHANNEL_PORT=63398
+
+      - EUFY_COORDINATOR_URL=http://stream-coordinator:8090
+
+      - EUFY_STREAM_NAME=entrance
+
+    depends_on:
+
+      - eufy-security-ws
+
+      - stream-coordinator
+
+
+
   packhouse-dashboard:
 
     image: nginx:alpine
@@ -243,4 +345,10 @@ services:
       - eufyp2pstream_indoor_receiving
 
       - eufyp2pstream_second_wash_dipping
+
+      - eufyp2pstream_outdoor_receiving
+
+      - eufyp2pstream_drying_dispatch
+
+      - eufyp2pstream_entrance
 

@@ -37,6 +37,30 @@ cameras:
       - license_plate
       - produce_crate
 
+  outdoor_receiving:
+    name: "Outdoor Receiving (Eufy T8170)"
+    rtsp: "rtsp://127.0.0.1:8554/outdoor_receiving"
+    goals:
+      - delivery_detection
+      - license_plate
+      - produce_crate
+
+  drying_dispatch:
+    name: "Drying Dispatch (Eufy T8170)"
+    rtsp: "rtsp://127.0.0.1:8554/drying_dispatch"
+    goals:
+      - delivery_detection
+      - produce_crate
+      - worker
+
+  entrance:
+    name: "Entrance (Eufy T8172)"
+    rtsp: "rtsp://127.0.0.1:8554/entrance"
+    goals:
+      - delivery_detection
+      - license_plate
+      - produce_crate
+
 # Future cameras (add eufyp2pstream_* service + go2rtc stream first):
 #  weighing:
 #    rtsp: rtsp://127.0.0.1:8554/weighing

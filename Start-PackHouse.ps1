@@ -38,6 +38,9 @@ $Go2RtcStreamByCamera = @{
     sorting_1            = "sorting_1"
     indoor_receiving     = "indoor_receiving"
     second_wash_dipping  = "second_wash_dipping"
+    outdoor_receiving    = "outdoor_receiving"
+    drying_dispatch      = "drying_dispatch"
+    entrance             = "entrance"
 }
 $Go2RtcStreamSrc = $Go2RtcStreamByCamera[$Camera]
 if (-not $Go2RtcStreamSrc) { $Go2RtcStreamSrc = $Camera }

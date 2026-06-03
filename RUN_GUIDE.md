@@ -159,8 +159,11 @@ Labels on screen use readable names from `packhouse-runtime/config/class_names.y
 | http://localhost:1984/stream.html?src=sorting_1 | Solo sorting 1 view |
 | http://localhost:1984/stream.html?src=indoor_receiving | Solo indoor receiving view |
 | http://localhost:1984/stream.html?src=second_wash_dipping | Solo second wash & dipping view |
+| http://localhost:1984/stream.html?src=outdoor_receiving | Solo outdoor receiving view |
+| http://localhost:1984/stream.html?src=drying_dispatch | Solo drying dispatch view |
+| http://localhost:1984/stream.html?src=entrance | Solo entrance view |
 | http://localhost:8090/status | Which camera holds the P2P slot |
-| `rtsp://127.0.0.1:8554/<stream>` | VLC / YOLO (`first_drying_stage`, `sorting_1`, `indoor_receiving`, `second_wash_dipping`) |
+| `rtsp://127.0.0.1:8554/<stream>` | VLC / YOLO — see `packhouse-runtime/config/cameras.yaml` (7 cameras) |
 
 Camera RTSP URL is configured in `packhouse-runtime/config/cameras.yaml`.
 
