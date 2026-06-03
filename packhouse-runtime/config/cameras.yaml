@@ -1,36 +1,31 @@
-# Pack house cameras — RTSP from go2rtc (repo root docker compose)
-# Start bridge first: docker compose up -d  (or .\Start-PackHouse.ps1)
+# Pack house cameras — go2rtc RTSP (repo root docker compose + stream coordinator)
+# Eufy HomeBase: one P2P livestream at a time — use one camera per detection session,
+# or the rotating dashboard: http://localhost:8080/dashboard.html
 
 default_camera: second_wash_dipping
 
 cameras:
   first_drying_stage:
     name: "First Drying Stage (Eufy T8170)"
+    go2rtc_src: first_drying_stage
     rtsp: "rtsp://127.0.0.1:8554/first_drying_stage"
-    # Optional JPEG fallback (lower FPS): http://127.0.0.1:1984/api/frame.jpeg?src=first_drying_stage
-    goals:
-      - delivery_detection
-      - license_plate
-      - produce_crate
+    http: "http://127.0.0.1:1984/api/stream.mjpeg?src=first_drying_stage"
 
   sorting_1:
     name: "Sorting 1 (Eufy T8170)"
+    go2rtc_src: sorting_1
     rtsp: "rtsp://127.0.0.1:8554/sorting_1"
-    goals:
-      - delivery_detection
-      - produce_crate
-      - worker
+    http: "http://127.0.0.1:1984/api/stream.mjpeg?src=sorting_1"
 
   indoor_receiving:
     name: "Indoor Receiving (Eufy T8170)"
+    go2rtc_src: indoor_receiving
     rtsp: "rtsp://127.0.0.1:8554/indoor_receiving"
-    goals:
-      - delivery_detection
-      - license_plate
-      - worker
+    http: "http://127.0.0.1:1984/api/stream.mjpeg?src=indoor_receiving"
 
   second_wash_dipping:
     name: "Second Wash & Dipping (Eufy T8170)"
+    go2rtc_src: second_wash_dipping
     rtsp: "rtsp://127.0.0.1:8554/second_wash_dipping"
     goals:
       - delivery_detection

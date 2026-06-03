@@ -1,9 +1,16 @@
-# Deployment models
+# Model weights
 
-| File | Used by default | Purpose |
-|------|-----------------|--------|
-| `packhouse_best.pt` | **Yes** | Main pack-house detector (19 classes) |
-| `plate_best.pt` | No | Reserved for license-plate–focused runs |
-| `scale_display.pt` | No | Reserved for scale/display region runs |
+| Path | Size | Purpose |
+|------|------|---------|
+| `LocateAnything-3B/` | ~7.6 GB | [nvidia/LocateAnything-3B](https://huggingface.co/nvidia/LocateAnything-3B) |
 
-Live inference uses `packhouse_best.pt` unless you pass `--model` to `Start-PackHouse.ps1`.
+## Download (on any PC with internet)
+
+```powershell
+cd packhouse-runtime
+.\scripts\Download-LocateAnythingModel.ps1
+```
+
+Copy the entire `Hrvst-Hackathon` folder (including `models/LocateAnything-3B/`) to a machine with an **NVIDIA GPU** and CUDA PyTorch.
+
+This directory is gitignored — do not commit weights.
