@@ -48,19 +48,33 @@ Full documentation: **[RUN_GUIDE.md](RUN_GUIDE.md)**
 ## Options
 
 ```powershell
-.\Start-PackHouse.ps1 -Camera indoor_receiving -Device cuda:0
-.\Start-PackHouse.ps1 -EveryNFrames 3
-.\Start-PackHouse.ps1 -SkipDocker
-.\Start-PackHouse.ps1 -NoShow
+.\Start-PackHouse.ps1 -NoShow              # no window; save annotated video
+.\Start-PackHouse.ps1 -Camera first_drying_stage     # YOLO on first drying stage
+.\Start-PackHouse.ps1 -Camera sorting_1              # YOLO on sorting 1 camera
+.\Start-PackHouse.ps1 -Camera indoor_receiving        # YOLO on indoor receiving
+.\Start-PackHouse.ps1 -Camera second_wash_dipping     # YOLO on second wash & dipping
+.\Start-PackHouse.ps1 -Camera outdoor_receiving       # YOLO on outdoor receiving
+.\Start-PackHouse.ps1 -Camera drying_dispatch         # YOLO on drying dispatch
+.\Start-PackHouse.ps1 -Camera entrance                # YOLO on entrance
+.\Start-PackHouse.ps1 -Device xpu          # Intel GPU inference
+.\Start-PackHouse.ps1 -Track               # object tracking IDs
+.\Start-PackHouse.ps1 -SkipDocker          # vision only (bridge already running)
 ```
 
 ## Stream URLs (bridge running)
 
 | Use | URL |
 |-----|-----|
-| Rotating dashboard | http://localhost:8080/dashboard.html |
-| Browser (solo) | http://localhost:1984/stream.html?src=second_wash_dipping |
-| RTSP | rtsp://127.0.0.1:8554/\<stream\> |
+| **Pack House dashboard** (rotating) | http://localhost:8080/dashboard.html |
+| Browser (first drying stage) | http://localhost:1984/stream.html?src=first_drying_stage |
+| Browser (sorting 1) | http://localhost:1984/stream.html?src=sorting_1 |
+| Browser (indoor receiving) | http://localhost:1984/stream.html?src=indoor_receiving |
+| Browser (second wash & dipping) | http://localhost:1984/stream.html?src=second_wash_dipping |
+| Browser (outdoor receiving) | http://localhost:1984/stream.html?src=outdoor_receiving |
+| Browser (drying dispatch) | http://localhost:1984/stream.html?src=drying_dispatch |
+| Browser (entrance) | http://localhost:1984/stream.html?src=entrance |
+| RTSP (YOLO / VLC) | `rtsp://127.0.0.1:8554/<stream>` — all 7 camera stream IDs in `packhouse-runtime/config/cameras.yaml` |
+| go2rtc stream list | http://localhost:1984/ |
 | Coordinator status | http://localhost:8090/status |
 | go2rtc | http://localhost:1984/ |
 
